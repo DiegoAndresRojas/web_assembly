@@ -1,0 +1,125 @@
+import type { ReactNode } from 'react'
+
+import { EyeIcon, OpacityIcon, TrashIcon } from '@/components/icons'
+import { IconButton } from '@/components/IconButton'
+import { useStore } from '@/store'
+import type { MeshRecord, StageMember } from '@/types/project'
+
+export interface MemberRowProps {
+  member: StageMember
+  mesh: MeshRecord
+  draggable?: boolean
+  leading?: ReactNode
+  onKill: () => void
+}
+
+/** One row in the assembly "Linked meshes" list or the animate "Meshes"
+ *  list: eye/opacity/kill controls shared by both. */
+export function MemberRow({ member, mesh, draggable = true, leading, onKill }: MemberRowProps) {
+  const opacityOpenId = useStore((s) => s.opacityOpenId)
+  const toggleMemberVisible = useStore((s) => s.toggleMemberVisible)
+  const toggleOpacityUI = useStore((s) => s.toggleOpacityUI)
+  const setMemberOpacity = useStore((s) => s.setMemberOpacity)
+  const opacityOpen = opacityOpenId === member.nodeId
+
+  return (
+    <div>
+      <div
+        draggable={draggable}
+        onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', member.nodeId)}
+        title={mesh.name}
+        style={{
+          cursor: 'grab',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          padding: '2px 0',
+        }}
+      >
+        {leading}
+        <div
+          style={{
+            width: 18,
+            height: 18,
+            flex: 'none',
+            borderRadius: 2,
+            backgroundImage:
+              'repeating-linear-gradient(135deg, var(--color-neutral-800), var(--color-neutral-800) 3px, transparent 3px, transparent 6px)',
+          }}
+        />
+        <span
+          style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 10,
+            color: 'var(--color-accent-300)',
+          }}
+        >
+          {mesh.ext.toUpperCase()}
+        </span>
+        <span className="text-muted" style={{ fontSize: 10 }}>
+          :
+        </span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 11,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {mesh.name}
+        </span>
+        <IconButton
+          title="Show / hide"
+          active={member.visible}
+          onClick={() => toggleMemberVisible(member.nodeId)}
+        >
+          <EyeIcon size={13} />
+        </IconButton>
+        <IconButton
+          title="Opacity"
+          active={opacityOpen}
+          onClick={() => toggleOpacityUI(member.nodeId)}
+        >
+          <OpacityIcon size={13} />
+        </IconButton>
+        <IconButton title="Remove from world" onClick={onKill}>
+          <TrashIcon size={13} />
+        </IconButton>
+      </div>
+      {opacityOpen && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            padding: '2px 0 6px 26px',
+          }}
+        >
+          <input
+            type="range"
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={member.opacity}
+            onChange={(e) => setMemberOpacity(member.nodeId, Number(e.target.value))}
+            style={{ flex: 1, accentColor: 'var(--color-accent)' }}
+          />
+          <span
+            className="text-muted"
+            style={{
+              fontSize: 10,
+              fontFamily: 'ui-monospace, monospace',
+              minWidth: 30,
+              textAlign: 'right',
+            }}
+          >
+            {Math.round(member.opacity * 100)}%
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
