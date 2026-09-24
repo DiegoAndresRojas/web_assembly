@@ -29,54 +29,32 @@ export const vec = {
   negate: (a: Vec3): Vec3 => ({ x: -a.x, y: -a.y, z: -a.z }),
 }
 
-/** Extrinsic X -> Y -> Z rotation of a vector by degrees. Only used for
- *  this module's own preview math (gap / candidate ranking); rendering
- *  applies rotations through three.js directly. */
-export function rotateEuler(v: Vec3, deg: Vec3): Vec3 {
-  let p = v
-  const rx = deg.x * RAD
-  const ry = deg.y * RAD
-  const rz = deg.z * RAD
-  if (rx) {
-    const c = Math.cos(rx)
-    const s = Math.sin(rx)
-    p = { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c }
-  }
-  if (ry) {
-    const c = Math.cos(ry)
-    const s = Math.sin(ry)
-    p = { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c }
-  }
-  if (rz) {
-    const c = Math.cos(rz)
-    const s = Math.sin(rz)
-    p = { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z }
-  }
-  return p
+function rotX(p: Vec3, rad: number): Vec3 {
+  const c = Math.cos(rad)
+  const s = Math.sin(rad)
+  return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c }
+}
+function rotY(p: Vec3, rad: number): Vec3 {
+  const c = Math.cos(rad)
+  const s = Math.sin(rad)
+  return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c }
+}
+function rotZ(p: Vec3, rad: number): Vec3 {
+  const c = Math.cos(rad)
+  const s = Math.sin(rad)
+  return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z }
 }
 
-/** Inverse of rotateEuler's X -> Y -> Z composition: Z -> Y -> X, negated. */
+/** Rotates a vector by an Euler rotation in degrees, matching three.js's
+ *  'XYZ' order (the one applyPose uses): the matrix is Rx·Ry·Rz, so the
+ *  vector turns about Z first, then Y, then X. */
+export function rotateEuler(v: Vec3, deg: Vec3): Vec3 {
+  return rotX(rotY(rotZ(v, deg.z * RAD), deg.y * RAD), deg.x * RAD)
+}
+
+/** Inverse of rotateEuler: X, then Y, then Z, each negated. */
 export function rotateEulerInverse(v: Vec3, deg: Vec3): Vec3 {
-  let p = v
-  const rx = -deg.x * RAD
-  const ry = -deg.y * RAD
-  const rz = -deg.z * RAD
-  if (rz) {
-    const c = Math.cos(rz)
-    const s = Math.sin(rz)
-    p = { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z }
-  }
-  if (ry) {
-    const c = Math.cos(ry)
-    const s = Math.sin(ry)
-    p = { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c }
-  }
-  if (rx) {
-    const c = Math.cos(rx)
-    const s = Math.sin(rx)
-    p = { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c }
-  }
-  return p
+  return rotZ(rotY(rotX(v, -deg.x * RAD), -deg.y * RAD), -deg.z * RAD)
 }
 
 export function pointWorld(pose: Pose, local: Vec3): Vec3 {

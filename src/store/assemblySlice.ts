@@ -1,21 +1,17 @@
-import {
-  nearestCandidates,
-  pointWorld,
-  rotateEulerInverse,
-  solveAxisAlign,
-  vec,
-} from '@/lib/keypoints'
+import * as THREE from 'three'
+
+import { solveAxisAlign, vec } from '@/lib/keypoints'
 import { normalizeLink } from '@/lib/migrations'
 import { num } from '@/lib/utils'
 import { findProject } from './helpers'
 import type { AssemblyActions, AssemblyState, Get, Set, StageSnapshot } from './types'
-import type { Axis, KeypointCandidate, KeypointLink, Stage, StageMember } from '@/types/project'
+import type { Axis, KeypointLink, Stage, StageMember, Vec3 } from '@/types/project'
 
 const HISTORY_LIMIT = 20
 
 export const initialAssemblyState: AssemblyState = {
   kpOn: false,
-  kpMode: 'vm',
+  kpMode: 'edges',
   pendingPicks: [],
   kpEditing: null,
   gapPending: null,
@@ -32,7 +28,25 @@ function snapshot(stage: Stage): StageSnapshot {
   }
 }
 
-/** Mutates `link` (state/gap) and `stage.members` in place. */
+const WORLD_AXES: Record<Axis, THREE.Vector3> = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+}
+
+function poseQuaternion(rot: Vec3): THREE.Quaternion {
+  const toRad = THREE.MathUtils.degToRad
+  // same Euler order applyPose() hands to three.js
+  return new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(toRad(rot.x), toRad(rot.y), toRad(rot.z), 'XYZ'),
+  )
+}
+
+/** Mutates `link` (state/gap) and `stage.members` in place: turns B about
+ *  the link's WORLD axis so its point normal faces A's, then slides B so
+ *  the two points coincide. When no turn about that axis can face the
+ *  normals (e.g. one of them is parallel to the axis — a corner picked
+ *  from a top face), B is only slid, so the points still meet. */
 function solveLinkInPlace(stage: Stage, link: KeypointLink): void {
   const memberA = stage.members.find((m) => m.nodeId === link.nodeA)
   const memberB = stage.members.find((m) => m.nodeId === link.nodeB)
@@ -41,19 +55,29 @@ function solveLinkInPlace(stage: Stage, link: KeypointLink): void {
     link.gap = vec.distance(link.pointA, link.pointB)
     return
   }
-  const deltaDeg = solveAxisAlign(link.axis, link.normalB, link.normalA)
-  if (deltaDeg === null) {
-    link.state = 'gap'
-    link.gap = vec.distance(link.pointA, link.pointB)
-    return
-  }
-  const oldRot = { ...memberB.pose.rot }
-  const localB = rotateEulerInverse(vec.sub(link.pointB, memberB.pose.pos), oldRot)
-  const newRot = { ...oldRot, [link.axis]: oldRot[link.axis] + deltaDeg }
-  memberB.pose.rot = newRot
-  const newWorldB = pointWorld({ pos: memberB.pose.pos, rot: newRot }, localB)
-  const shift = vec.sub(link.pointA, newWorldB)
-  memberB.pose.pos = vec.add(memberB.pose.pos, shift)
+  const deltaDeg = solveAxisAlign(link.axis, link.normalB, link.normalA) ?? 0
+
+  const pos = new THREE.Vector3(memberB.pose.pos.x, memberB.pose.pos.y, memberB.pose.pos.z)
+  const oldQ = poseQuaternion(memberB.pose.rot)
+  const turn = new THREE.Quaternion().setFromAxisAngle(
+    WORLD_AXES[link.axis],
+    THREE.MathUtils.degToRad(deltaDeg),
+  )
+  const newQ = turn.clone().multiply(oldQ)
+
+  // B's picked point in B's local frame, then back out under the new turn
+  const localB = new THREE.Vector3(link.pointB.x, link.pointB.y, link.pointB.z)
+    .sub(pos)
+    .applyQuaternion(oldQ.clone().invert())
+  const newWorldB = localB.applyQuaternion(newQ).add(pos)
+  const newPos = pos.add(
+    new THREE.Vector3(link.pointA.x, link.pointA.y, link.pointA.z).sub(newWorldB),
+  )
+
+  const e = new THREE.Euler().setFromQuaternion(newQ, 'XYZ')
+  const toDeg = THREE.MathUtils.radToDeg
+  memberB.pose.rot = { x: toDeg(e.x), y: toDeg(e.y), z: toDeg(e.z) }
+  memberB.pose.pos = { x: newPos.x, y: newPos.y, z: newPos.z }
   link.state = 'solved'
   link.gap = 0
 }
@@ -83,21 +107,6 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
       set((state) => {
         state.kpMode = mode
       })
-    },
-
-    resolveKeypointCandidate(hit, candidates) {
-      if (get().kpMode === 'fr' || !candidates.length) return hit
-      const wantLabel: KeypointCandidate['label'] = get().kpMode === 'fm' ? 'face' : 'corner'
-      const filtered = candidates.filter((c) => c.label === wantLabel)
-      if (!filtered.length) return hit
-      const nearest = nearestCandidates(filtered, hit.point, { limit: 1 })
-      if (!nearest.length) return hit
-      const c = nearest[0].point
-      return {
-        nodeId: hit.nodeId,
-        point: { x: c.x, y: c.y, z: c.z },
-        normal: { x: c.nx, y: c.ny, z: c.nz },
-      }
     },
 
     pickPoint(hit) {
@@ -139,6 +148,16 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
         createdGap = link.gap
         state.pendingPicks = []
         state.gapPending = createdState === 'gap' ? { linkId: createdId, gap: createdGap } : null
+      })
+    },
+
+    setMemberPose(nodeId, pose) {
+      pushHistory()
+      set((state) => {
+        const project = findProject(state, state.pid)
+        const stage = project && state.aid ? project.stages[state.aid] : undefined
+        const member = stage?.members.find((m) => m.nodeId === nodeId)
+        if (member) member.pose = { pos: { ...pose.pos }, rot: { ...pose.rot } }
       })
     },
 

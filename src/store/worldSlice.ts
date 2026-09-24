@@ -1,4 +1,4 @@
-import { membersOf } from '@/lib/graph'
+import { keyRefersTo, membersOf } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import { clamp } from '@/lib/utils'
 import { ensureStage, findProject, stageKindFromNode } from './helpers'
@@ -61,7 +61,7 @@ export function createWorldSlice(set: Set, get: Get): WorldActions {
         const stage = project.stages[aid]
         if (stage) {
           stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
-          stage.tracks = stage.tracks.filter((t) => t.nodeId !== nodeId)
+          stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
           stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
         }
         if (state.worldSelId === nodeId) state.worldSelId = null

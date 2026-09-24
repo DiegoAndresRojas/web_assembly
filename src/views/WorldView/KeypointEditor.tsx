@@ -1,14 +1,13 @@
 import { Button } from '@/components/Button'
 import { Segmented } from '@/components/Segmented'
 import { TrashIcon } from '@/components/icons'
-import { meshForNodeId } from '@/lib/graph'
+import { inputLabel } from '@/lib/graph'
 import { useStore } from '@/store'
 import type { Project, Stage } from '@/types/project'
 
 const KP_MODES = [
-  { value: 'vm' as const, label: 'Corners' },
-  { value: 'fm' as const, label: 'Faces' },
-  { value: 'fr' as const, label: 'Free' },
+  { value: 'faces' as const, label: 'Faces' },
+  { value: 'edges' as const, label: 'Edges' },
 ]
 
 export interface KeypointEditorProps {
@@ -201,8 +200,8 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
             </thead>
             <tbody>
               {stage.links.map((l) => {
-                const nameA = meshForNodeId(project, l.nodeA)?.name ?? '?'
-                const nameB = meshForNodeId(project, l.nodeB)?.name ?? '?'
+                const nameA = inputLabel(project, l.nodeA)
+                const nameB = inputLabel(project, l.nodeB)
                 const color =
                   l.state === 'solved'
                     ? '#7ac08f'

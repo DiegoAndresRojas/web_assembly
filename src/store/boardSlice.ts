@@ -1,4 +1,5 @@
 import { MESH_H, MESH_W, NODE_W, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '@/lib/constants'
+import { edgeFor, keyRefersTo } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import { clamp, uid } from '@/lib/utils'
 import { findProject } from './helpers'
@@ -82,7 +83,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       set((state) => {
         const project = findProject(state, state.pid)
         if (!project) return
-        project.board.nodes.push({ id: uid(), kind: 'mesh', x, y, meshId, label: null })
+        project.board.nodes.push({ id: uid(), kind: 'mesh', x, y, meshId, label: null, color: null })
       })
     },
     dropStageOnBoard(kind, x, y) {
@@ -92,7 +93,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const count = project.board.nodes.filter((n) => n.kind === kind).length + 1
         const label = kind[0].toUpperCase() + kind.slice(1) + ' ' + count
         const id = uid()
-        project.board.nodes.push({ id, kind, x, y, meshId: null, label })
+        project.board.nodes.push({ id, kind, x, y, meshId: null, label, color: null })
         // WorldView renders nothing for a stage that has no `stages[id]`
         // record yet — create it up front instead of waiting for openStage.
         project.stages[id] = normalizeStage({ kind })
@@ -157,15 +158,15 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         project.board.edges = project.board.edges.filter(
           (e) => e.from !== nodeId && e.to !== nodeId,
         )
-        if (node && node.kind !== 'mesh') {
-          delete project.stages[nodeId]
-        } else {
-          for (const stageId in project.stages) {
-            const stage = project.stages[stageId]
-            stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
-            stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
-            stage.tracks = stage.tracks.filter((t) => t.nodeId !== nodeId)
-          }
+        if (node && node.kind !== 'mesh') delete project.stages[nodeId]
+        // meshes and upstream assemblies are both stage inputs — drop every
+        // downstream reference to the deleted node
+        for (const stageId in project.stages) {
+          const stage = project.stages[stageId]
+          stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
+          stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
+          stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
+          stage.observing = stage.observing.filter((id) => id !== nodeId)
         }
         if (state.selId === nodeId) state.selId = null
       })
@@ -197,14 +198,10 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const target = project.board.nodes.find(
           (n) => n.id !== from.id && pointInNode(n.kind, n.x, n.y, x, y),
         )
-        const meshEnd = from.kind === 'mesh' ? from : target?.kind === 'mesh' ? target : null
-        const stageEnd =
-          from.kind !== 'mesh' ? from : target && target.kind !== 'mesh' ? target : null
-        if (target && meshEnd && stageEnd && meshEnd !== stageEnd) {
-          const exists = project.board.edges.some(
-            (e) => e.from === meshEnd.id && e.to === stageEnd.id,
-          )
-          if (!exists) project.board.edges.push({ id: uid(), from: meshEnd.id, to: stageEnd.id })
+        const edge = target ? edgeFor(project, from, target) : null
+        if (edge) {
+          const exists = project.board.edges.some((e) => e.from === edge.from && e.to === edge.to)
+          if (!exists) project.board.edges.push({ id: uid(), ...edge })
         }
         state.linking = null
       })

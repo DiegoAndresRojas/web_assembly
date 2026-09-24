@@ -1,5 +1,5 @@
-// Mesh building from uploaded files, pose/color/opacity application,
-// keypoint-candidate extraction and mesh export. Typed port of
+// Mesh building from uploaded files, pose/color/opacity application and
+// mesh export (keypoint snapping lives in surfaceSnap.ts). Typed port of
 // only_js/src/composables/useThree.js — three is now a real npm
 // dependency, so loaders/exporters are static imports instead of
 // esm.sh dynamic import()s.
@@ -13,7 +13,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js'
 
 import { DEFAULT_MESH_COLOR } from '@/lib/constants'
 import { clamp, num } from '@/lib/utils'
-import type { KeypointCandidate, MeshRecord, Pose } from '@/types/project'
+import type { MeshRecord, Pose } from '@/types/project'
 
 export type DownloadFormat = 'glb' | 'obj' | 'stl'
 
@@ -141,46 +141,6 @@ export function applyOpacity(object3d: THREE.Object3D, opacity: number): void {
     mat.transparent = o < 1
     mat.opacity = o
   })
-}
-
-/** Bounding-box corners + face centers in WORLD space, each with an
- *  outward-pointing normal — good-enough keypoint snap candidates without
- *  needing per-vertex geometry access. */
-export function keypointCandidates(object3d: THREE.Object3D): KeypointCandidate[] {
-  object3d.updateWorldMatrix(true, true)
-  const box = new THREE.Box3().setFromObject(object3d)
-  if (box.isEmpty()) return []
-  const { min, max } = box
-  const mid = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5)
-  const pts: KeypointCandidate[] = []
-
-  const corners: Array<[number, number, number]> = [
-    [min.x, min.y, min.z],
-    [max.x, min.y, min.z],
-    [min.x, max.y, min.z],
-    [max.x, max.y, min.z],
-    [min.x, min.y, max.z],
-    [max.x, min.y, max.z],
-    [min.x, max.y, max.z],
-    [max.x, max.y, max.z],
-  ]
-  for (const [x, y, z] of corners) {
-    const n = { x: x === min.x ? -1 : 1, y: y === min.y ? -1 : 1, z: z === min.z ? -1 : 1 }
-    const len = Math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z) || 1
-    pts.push({ x, y, z, nx: n.x / len, ny: n.y / len, nz: n.z / len, label: 'corner' })
-  }
-  const faces: Array<{ p: [number, number, number]; n: [number, number, number] }> = [
-    { p: [mid.x, mid.y, min.z], n: [0, 0, -1] },
-    { p: [mid.x, mid.y, max.z], n: [0, 0, 1] },
-    { p: [mid.x, min.y, mid.z], n: [0, -1, 0] },
-    { p: [mid.x, max.y, mid.z], n: [0, 1, 0] },
-    { p: [min.x, mid.y, mid.z], n: [-1, 0, 0] },
-    { p: [max.x, mid.y, mid.z], n: [1, 0, 0] },
-  ]
-  for (const f of faces) {
-    pts.push({ x: f.p[0], y: f.p[1], z: f.p[2], nx: f.n[0], ny: f.n[1], nz: f.n[2], label: 'face' })
-  }
-  return pts
 }
 
 function blobFromExport(

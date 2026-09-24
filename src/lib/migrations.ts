@@ -55,6 +55,7 @@ export function normalizeNode(raw: unknown): BoardNode | null {
     y: num(n.y, 0),
     meshId: kind === 'mesh' ? (typeof n.meshId === 'string' ? n.meshId : null) : null,
     label: typeof n.label === 'string' ? n.label : null,
+    color: typeof n.color === 'string' ? n.color : null,
   }
 }
 
@@ -199,12 +200,21 @@ export function normalizeProject(raw: unknown): Project | null {
     }
   }
 
+  const meshes = Array.isArray(p.meshes)
+    ? p.meshes.map(normalizeMesh).filter((m): m is MeshRecord => !!m)
+    : []
+  // color used to live on the library mesh (shared by every node of that
+  // file) — hand it down to each node, which now owns its color
+  for (const n of nodes) {
+    if (n.kind !== 'mesh' || n.color) continue
+    n.color = meshes.find((m) => m.id === n.meshId)?.color ?? null
+  }
+  for (const m of meshes) m.color = null
+
   return {
     id: typeof p.id === 'string' && p.id ? p.id : uid(),
     name: typeof p.name === 'string' && p.name ? p.name : 'Project',
-    meshes: Array.isArray(p.meshes)
-      ? p.meshes.map(normalizeMesh).filter((m): m is MeshRecord => !!m)
-      : [],
+    meshes,
     board,
     stages,
   }

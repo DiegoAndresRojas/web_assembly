@@ -18,5 +18,4 @@ export const TRACK_ROW_H = 34
 export const DEFAULT_MESH_COLOR = '#9a97ab'
 export const KP_POINT_COLOR = '#968ae0'
 export const KP_GAP_EPS = 0.02
-
 export const MESH_EXTS = ['glb', 'gltf', 'obj', 'stl'] as const

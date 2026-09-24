@@ -1,6 +1,6 @@
 import { CameraTrackIcon, PlusIcon, TrashIcon } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
-import { meshForNodeId } from '@/lib/graph'
+import { inputLabel, meshForNodeId, PART_SEP } from '@/lib/graph'
 import { PX_PER_SECOND } from '@/lib/constants'
 import { useStore } from '@/store'
 import type { Project, Track } from '@/types/project'
@@ -15,7 +15,8 @@ export function TrackLabel({ project, track }: TrackLaneProps) {
   const openInitEditor = useStore((s) => s.openInitEditor)
   const onAddAction = useStore((s) => s.openNewAction)
   const isCam = track.targetKind === 'camera'
-  const mesh = isCam ? null : meshForNodeId(project, track.nodeId)
+  // a part key (`asm/mesh`) ends in the mesh's own node id
+  const mesh = isCam ? null : meshForNodeId(project, track.nodeId?.split(PART_SEP).pop() ?? null)
 
   return (
     <div
@@ -42,7 +43,7 @@ export function TrackLabel({ project, track }: TrackLaneProps) {
           fontFamily: 'ui-monospace, monospace',
         }}
       >
-        {isCam ? <CameraTrackIcon size={11} /> : mesh?.ext.toUpperCase().slice(0, 3)}
+        {isCam ? <CameraTrackIcon size={11} /> : (mesh?.ext.toUpperCase().slice(0, 3) ?? 'ASM')}
       </div>
       <span
         style={{
@@ -54,7 +55,7 @@ export function TrackLabel({ project, track }: TrackLaneProps) {
           textOverflow: 'ellipsis',
         }}
       >
-        {isCam ? 'Camera' : (mesh?.name ?? 'Mesh')}
+        {isCam ? 'Camera' : inputLabel(project, track.nodeId)}
       </span>
       <IconButton title="Initial pose" onClick={() => openInitEditor(track.id)}>
         i

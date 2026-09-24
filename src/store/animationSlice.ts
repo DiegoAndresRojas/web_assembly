@@ -1,4 +1,4 @@
-import { meshForNodeId } from '@/lib/graph'
+import { inputLabel, partForKey } from '@/lib/graph'
 import { normalizeAction, normalizeTrack } from '@/lib/migrations'
 import { nextActionDefaults, stageDuration } from '@/lib/timeline'
 import { num } from '@/lib/utils'
@@ -58,6 +58,15 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         const project = findProject(state, state.pid)
         const stage = project && state.aid ? project.stages[state.aid] : undefined
         if (!stage) return
+        // a mesh inside an assembly input: its track moves it within the
+        // assembly, starting from where the assembly placed it
+        const part = partForKey(project ?? null, nodeId)
+        if (part) {
+          if (!stage.tracks.some((t) => t.nodeId === nodeId)) {
+            stage.tracks.push(normalizeTrack({ targetKind: 'mesh', nodeId, initPose: part.pose })!)
+          }
+          return
+        }
         if (!stage.members.some((m) => m.nodeId === nodeId)) {
           stage.members.push({
             nodeId,
@@ -95,13 +104,14 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
       const stage = project && aid ? project.stages[aid] : undefined
       const track = stage?.tracks.find((t) => t.id === trackId)
       if (track && track.actions.length) {
-        const mesh =
-          track.targetKind === 'mesh' ? meshForNodeId(project ?? null, track.nodeId) : null
         set((state) => {
           state.confirm = {
             kind: 'track',
             id: trackId,
-            label: track.targetKind === 'camera' ? 'Camera' : (mesh?.name ?? 'Mesh'),
+            label:
+              track.targetKind === 'camera'
+                ? 'Camera'
+                : inputLabel(project ?? null, track.nodeId),
           }
         })
         return

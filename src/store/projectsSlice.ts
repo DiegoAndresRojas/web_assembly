@@ -99,9 +99,8 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
       const state = get()
       const project = state.projects.find((p) => p.id === state.pid)
       const node = project?.board.nodes.find((n) => n.id === nodeId)
-      const mesh = node ? project?.meshes.find((m) => m.id === node.meshId) : undefined
       set((s) => {
-        s.colorEdit = { nodeId, value: mesh?.color ?? DEFAULT_MESH_COLOR }
+        s.colorEdit = { nodeId, value: node?.color ?? DEFAULT_MESH_COLOR }
       })
     },
     cancelColorEditor() {
@@ -120,8 +119,7 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
       set((state) => {
         const project = findProject(state, pid)
         const node = project?.board.nodes.find((n) => n.id === colorEdit.nodeId)
-        const mesh = node ? project?.meshes.find((m) => m.id === node.meshId) : undefined
-        if (mesh) mesh.color = colorEdit.value
+        if (node) node.color = colorEdit.value
         state.colorEdit = null
       })
     },

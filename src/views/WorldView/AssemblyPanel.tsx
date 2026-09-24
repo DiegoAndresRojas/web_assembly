@@ -32,7 +32,7 @@ export function AssemblyPanel({ project, stageId, stage }: AssemblyPanelProps) {
             <MemberRow
               key={row.node.id}
               member={member}
-              mesh={row.mesh}
+              input={row}
               onKill={() => removeMember(row.node.id)}
             />
           )

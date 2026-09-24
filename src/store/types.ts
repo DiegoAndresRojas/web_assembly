@@ -4,11 +4,12 @@
 // see store/index.ts.
 import type { Draft } from 'immer'
 
+import type { SnapMode } from '@/lib/three/surfaceSnap'
 import type {
   Axis,
-  KeypointCandidate,
   KeypointLink,
   PickHit,
+  Pose,
   Project,
   StageMember,
   Vec3,
@@ -141,7 +142,8 @@ export interface StageSnapshot {
 
 export interface AssemblyState {
   kpOn: boolean
-  kpMode: 'vm' | 'fm' | 'fr'
+  /** 'edges' = corners + edge midpoints, 'faces' = flat-face centers. */
+  kpMode: SnapMode
   pendingPicks: PickHit[]
   kpEditing: string | null
   gapPending: { linkId: string; gap: number } | null
@@ -153,9 +155,11 @@ export interface AssemblyState {
 
 export interface AssemblyActions {
   toggleKp: (on: boolean) => void
-  setKpMode: (mode: 'vm' | 'fm' | 'fr') => void
-  resolveKeypointCandidate: (hit: PickHit, candidates: KeypointCandidate[]) => PickHit
+  setKpMode: (mode: SnapMode) => void
   pickPoint: (hit: PickHit) => void
+  /** Persists a member pose edited directly in the viewport (gizmo),
+   *  as an undoable step. */
+  setMemberPose: (nodeId: string, pose: Pose) => void
   removeLink: (linkId: string) => void
   acceptGap: () => void
   rejectGap: () => void

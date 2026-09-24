@@ -35,11 +35,13 @@ export interface BoardNode {
   y: number
   meshId: string | null
   label: string | null
+  /** Per board node, so the same file dropped twice can be colored apart. */
+  color: string | null
 }
 
 export interface BoardEdge {
   id: string
-  from: string // mesh board-node id
+  from: string // mesh board-node id, or an upstream stage node id
   to: string // stage board-node id
 }
 
@@ -120,19 +122,11 @@ export interface Project {
   stages: Record<string, Stage>
 }
 
+/** A stage input: a mesh node (`mesh` set) or an upstream assembly node
+ *  (`mesh` null) that comes in as one rigid part. */
 export interface MembersRow {
   node: BoardNode
-  mesh: MeshRecord
-}
-
-export interface KeypointCandidate {
-  x: number
-  y: number
-  z: number
-  nx: number
-  ny: number
-  nz: number
-  label: 'corner' | 'face'
+  mesh: MeshRecord | null
 }
 
 export interface PickHit {

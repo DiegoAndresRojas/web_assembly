@@ -3,19 +3,22 @@ import type { ReactNode } from 'react'
 import { EyeIcon, OpacityIcon, TrashIcon } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
 import { useStore } from '@/store'
-import type { MeshRecord, StageMember } from '@/types/project'
+import type { MembersRow, StageMember } from '@/types/project'
 
 export interface MemberRowProps {
   member: StageMember
-  mesh: MeshRecord
+  input: MembersRow
   draggable?: boolean
   leading?: ReactNode
   onKill: () => void
 }
 
 /** One row in the assembly "Linked meshes" list or the animate "Meshes"
- *  list: eye/opacity/kill controls shared by both. */
-export function MemberRow({ member, mesh, draggable = true, leading, onKill }: MemberRowProps) {
+ *  list: eye/opacity/kill controls shared by both. An upstream assembly
+ *  input shows as "ASM" with its stage label. */
+export function MemberRow({ member, input, draggable = true, leading, onKill }: MemberRowProps) {
+  const name = input.mesh?.name ?? input.node.label ?? input.node.kind
+  const tag = input.mesh ? input.mesh.ext.toUpperCase() : 'ASM'
   const opacityOpenId = useStore((s) => s.opacityOpenId)
   const toggleMemberVisible = useStore((s) => s.toggleMemberVisible)
   const toggleOpacityUI = useStore((s) => s.toggleOpacityUI)
@@ -27,7 +30,7 @@ export function MemberRow({ member, mesh, draggable = true, leading, onKill }: M
       <div
         draggable={draggable}
         onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', member.nodeId)}
-        title={mesh.name}
+        title={name}
         style={{
           cursor: 'grab',
           display: 'flex',
@@ -54,7 +57,7 @@ export function MemberRow({ member, mesh, draggable = true, leading, onKill }: M
             color: 'var(--color-accent-300)',
           }}
         >
-          {mesh.ext.toUpperCase()}
+          {tag}
         </span>
         <span className="text-muted" style={{ fontSize: 10 }}>
           :
@@ -69,7 +72,7 @@ export function MemberRow({ member, mesh, draggable = true, leading, onKill }: M
             textOverflow: 'ellipsis',
           }}
         >
-          {mesh.name}
+          {name}
         </span>
         <IconButton
           title="Show / hide"

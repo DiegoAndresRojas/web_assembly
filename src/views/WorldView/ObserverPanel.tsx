@@ -7,11 +7,13 @@ export function ObserverPanel() {
   const toggleObserve = useStore((s) => s.toggleObserve)
   const focusObserved = useStore((s) => s.selectWorldObject)
 
-  const stage = useStore((s) => {
-    const project = s.projects.find((p) => p.id === s.pid)
-    return s.aid && project ? project.stages[s.aid] : undefined
-  })
-  const observing = stage?.observing ?? []
+  const project = useStore((s) => s.projects.find((p) => p.id === s.pid) ?? null)
+  const aid = useStore((s) => s.aid)
+  const observing = (aid && project?.stages[aid]?.observing) || []
+  // stages wired into this observer on the board are always shown
+  const wired = new Set(
+    project?.board.edges.filter((e) => e.to === aid).map((e) => e.from) ?? [],
+  )
 
   return (
     <div
@@ -30,9 +32,11 @@ export function ObserverPanel() {
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: '2px 0' }}
         >
           <IconButton
-            title="Show / hide"
-            active={observing.includes(o.id)}
-            onClick={() => toggleObserve(o.id)}
+            title={wired.has(o.id) ? 'Connected on the board' : 'Show / hide'}
+            active={wired.has(o.id) || observing.includes(o.id)}
+            onClick={() => {
+              if (!wired.has(o.id)) toggleObserve(o.id)
+            }}
           >
             <EyeIcon size={15} />
           </IconButton>

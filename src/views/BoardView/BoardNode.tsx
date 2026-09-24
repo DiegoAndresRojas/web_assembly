@@ -104,6 +104,12 @@ export function BoardNode({
               boxShadow: 'var(--shadow-sm)',
             }}
           >
+            {node.color && (
+              <div
+                title={`Color ${node.color}`}
+                style={{ height: 4, flex: 'none', background: node.color }}
+              />
+            )}
             <div
               style={{
                 flex: 1,
@@ -125,15 +131,36 @@ export function BoardNode({
             </div>
             <div
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
                 padding: '6px 8px',
                 fontSize: 11,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
                 borderTop: '1px solid var(--color-divider)',
               }}
             >
-              {mesh?.name ?? ''}
+              {node.color && (
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    flex: 'none',
+                    borderRadius: '50%',
+                    background: node.color,
+                    boxShadow: '0 0 0 1px var(--color-divider)',
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  minWidth: 0,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {mesh?.name ?? ''}
+              </span>
             </div>
           </div>
           {showHandles && (

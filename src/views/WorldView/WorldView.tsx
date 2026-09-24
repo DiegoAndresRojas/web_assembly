@@ -34,8 +34,8 @@ export function WorldView({ stageId }: { stageId: string }) {
   const stage = project.stages[stageId]
   if (!stage) return null
 
-  const observedAnim = wmode === 'observer' && !!firstAnimatedObserved(project, stage)
-  const observedTarget = observedAnim ? firstAnimatedObserved(project, stage) : null
+  const observedTarget = wmode === 'observer' ? firstAnimatedObserved(project, stageId) : null
+  const observedAnim = !!observedTarget
   const observedDur = observedTarget ? stageDuration(observedTarget.stage) : 0
 
   return (
