@@ -9,7 +9,7 @@
 import * as THREE from 'three'
 
 import { stageName } from './cameras'
-import { earlierAnimations } from './chain'
+import { earlierAnimations, poseSources } from './chain'
 import { easeValue, actionEnd, poseAtTime, sortedActions, stageDuration } from './timeline'
 import { uid } from './utils'
 import type {
@@ -330,10 +330,19 @@ export interface LightSource {
   floor: boolean
 }
 
-/** The animations `stageId` can take lighting from: the ones earlier in
- *  its chain of assemblies that have any, nearest first. */
+/** The animations `stageId` can take lighting from: any that has some and
+ *  shares pieces with it — the ones earlier in its chain of assemblies
+ *  first (nearest first), then the others in board order. */
 export function lightSources(project: Project, stageId: string): LightSource[] {
-  return earlierAnimations(project, stageId).flatMap((id) => {
+  const earlier = earlierAnimations(project, stageId)
+  const sharing = poseSources(project, stageId)
+    .map((s) => s.stageId)
+    .filter((id) => !earlier.includes(id))
+  return describeSources(project, [...earlier, ...sharing])
+}
+
+function describeSources(project: Project, stageIds: string[]): LightSource[] {
+  return stageIds.flatMap((id) => {
     const stage = project.stages[id]
     if (!stage || !hasLighting(stage)) return []
     return [
@@ -359,12 +368,13 @@ export function setLighting(stage: Stage, lighting: Lighting): void {
 
 /** Has animation `stageId` take up the lighting of the nearest animation
  *  earlier in its chain that has any, as that one ends. Only for a stage
- *  with no lighting of its own yet. Mutates the project (an immer draft).
+ *  with no lighting of its own yet. (On its own, lighting only ever flows
+ *  forward; taking it from any other animation is the author's call.) Mutates the project (an immer draft).
  *  Returns whether anything was taken. */
 export function recoverLightsFromChain(project: Project, stageId: string): boolean {
   const stage = project.stages[stageId]
   if (!stage || hasLighting(stage)) return false
-  const from = lightSources(project, stageId)[0]
+  const from = describeSources(project, earlierAnimations(project, stageId))[0]
   const source = from && project.stages[from.stageId]
   if (!source) return false
   setLighting(stage, lightingAt(source, 'end'))

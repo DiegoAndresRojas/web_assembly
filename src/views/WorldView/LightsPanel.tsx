@@ -618,7 +618,7 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
         </select>
         {sources.length > 0 && (
           <IconButton
-            title="Import the lighting of an animation earlier in the chain"
+            title="Import the lighting of another animation of these pieces"
             aria-label="Import lighting from an earlier animation"
             onClick={() => setImporting(true)}
           >
@@ -637,7 +637,7 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
       {open && stage.lights.length === 0 && sources.length > 0 && (
         <button
           className="link-button"
-          title="Take the lighting of the animation before this one in the chain"
+          title="Take the lighting of that animation, as it ends"
           onClick={() => importLights(sources[0].stageId, 'replace')}
           style={{ alignSelf: 'flex-start', fontSize: 10 }}
         >

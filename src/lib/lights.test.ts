@@ -149,14 +149,20 @@ describe('lights over time', () => {
 })
 
 describe('lighting along the chain', () => {
-  it('is only offered forward: later animations see earlier ones, never back', () => {
+  it('is offered by every lit animation sharing pieces, earlier ones first', () => {
     const project = chain({
       anim1: { kind: 'animation', lights: [sun('a')] },
       anim3: { kind: 'animation', lights: [sun('c')] },
     })
-    expect(lightSources(project, 'anim1')).toEqual([])
-    expect(lightSources(project, 'anim2').map((s) => s.stageId)).toEqual(['anim1'])
+    expect(lightSources(project, 'anim1').map((s) => s.stageId)).toEqual(['anim3'])
+    expect(lightSources(project, 'anim2').map((s) => s.stageId)).toEqual(['anim1', 'anim3'])
     expect(lightSources(project, 'anim3').map((s) => s.stageId)).toEqual(['anim1'])
+  })
+
+  it('is only taken up on its own from earlier in the chain', () => {
+    const project = chain({ anim3: { kind: 'animation', lights: [sun('c')] } })
+    expect(recoverLightsFromChain(project, 'anim1')).toBe(false)
+    expect(project.stages.anim1.lights).toEqual([])
   })
 
   it('lists the nearest earlier animation first', () => {

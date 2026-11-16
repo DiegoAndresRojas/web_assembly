@@ -159,7 +159,7 @@ export function createLightsSlice(set: Set, get: Get): LightsActions {
     importLights(fromStageId, mode) {
       const { pid, aid, projects } = get()
       const project = projects.find((p) => p.id === pid)
-      // lighting is only ever handed forward along the chain
+      // only from an animation that shares pieces with this one
       const allowed =
         project && aid && lightSources(project, aid).some((s) => s.stageId === fromStageId)
       const source = allowed ? project.stages[fromStageId] : undefined

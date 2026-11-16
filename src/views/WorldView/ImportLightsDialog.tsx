@@ -19,14 +19,14 @@ function describe(source: LightSource): string {
 }
 
 export interface ImportLightsDialogProps {
-  /** The animations earlier in the chain that have lighting, nearest first. */
+  /** The lit animations sharing pieces with this one, the chain's earlier ones first. */
   sources: LightSource[]
   hasLights: boolean
   onClose: () => void
 }
 
-/** Lights this animation the way an earlier one in its chain is lit when
- *  it ends — lighting is handed forward along the chain, never back. */
+/** Lights this animation the way another one sharing pieces with it is
+ *  lit when it ends. */
 export function ImportLightsDialog({ sources, hasLights, onClose }: ImportLightsDialogProps) {
   const importLights = useStore((s) => s.importLights)
   const [stageId, setStageId] = useState(sources[0]?.stageId ?? '')
@@ -77,9 +77,8 @@ export function ImportLightsDialog({ sources, hasLights, onClose }: ImportLights
         </div>
       )}
       <div className="text-muted" style={{ fontSize: 11, marginTop: 'var(--space-3)' }}>
-        Only animations earlier in this chain of assemblies are listed. The lights come as they are
-        when that animation ends, as copies of your own: how they move there is not copied, and
-        changing them here changes nothing there.
+        Animations that share pieces with this one are listed. The lights come as they are when that
+        animation ends, as copies of your own: how they move there is not copied.
       </div>
     </Dialog>
   )
