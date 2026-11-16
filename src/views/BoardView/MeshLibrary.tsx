@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 
-import { CloseIcon, PlusIcon } from '@/components/icons'
+import { CloseIcon, DownloadIcon, PlusIcon } from '@/components/icons'
+import { downloadDataUrl } from '@/lib/download'
 import { useStore } from '@/store'
 import type { MeshRecord, Project } from '@/types/project'
 
@@ -15,6 +16,12 @@ function readAsDataUrl(file: File): Promise<string | null> {
     reader.onerror = () => resolve(null)
     reader.readAsDataURL(file)
   })
+}
+
+/** The name to save a library file under — its own, with its extension. */
+function fileName(mesh: MeshRecord): string {
+  const ext = '.' + mesh.ext
+  return !mesh.ext || mesh.name.toLowerCase().endsWith(ext) ? mesh.name : mesh.name + ext
 }
 
 export function MeshLibrary({ project }: MeshLibraryProps) {
@@ -146,6 +153,35 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
             >
               {m.ext.toUpperCase()}
             </span>
+            {m.data && (
+              <button
+                type="button"
+                title={`Download ${fileName(m)}`}
+                aria-label={`Download ${fileName(m)}`}
+                draggable={false}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void downloadDataUrl(m.data!, fileName(m))
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 3,
+                  left: 3,
+                  width: 17,
+                  height: 17,
+                  padding: 0,
+                  border: 'none',
+                  display: 'grid',
+                  placeItems: 'center',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(22,24,38,0.72)',
+                  color: 'var(--color-neutral-300)',
+                  cursor: 'pointer',
+                }}
+              >
+                <DownloadIcon size={10} />
+              </button>
+            )}
             <div
               title="Delete mesh"
               onClick={(e) => {
