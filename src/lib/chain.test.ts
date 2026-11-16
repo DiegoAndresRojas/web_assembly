@@ -5,6 +5,7 @@ import {
   effectiveTrack,
   evalStageIn,
   importedPoses,
+  movedBy,
   poseSources,
   stagePieces,
   startPoseOf,
@@ -197,8 +198,79 @@ describe('importedPoses — from another animation', () => {
   it('lists the animations that share pieces with the open one', () => {
     const p = animated()
     expect(poseSources(p, 'anim2')).toEqual([{ stageId: 'anim1', pieces: 1 }])
-    // anim1 only sees asm2's pieces as something nested above its own
-    expect(poseSources(p, 'anim1')).toEqual([])
+    // and the other way round: piece1 is the one piece anim1 has
+    expect(poseSources(p, 'anim1')).toEqual([{ stageId: 'anim2', pieces: 1 }])
+  })
+
+  it('counts how many pieces an import would actually move', () => {
+    const p = animated()
+    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'end'))).toBe(1)
+    // where anim1 starts is where the assembly has the piece: nothing moves
+    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'start'))).toBe(0)
+  })
+})
+
+describe('importedPoses — the same pieces reached through other assemblies', () => {
+  /** Two assemblies fed by the same mesh node (asmB is how a duplicated
+   *  assembly looks), each with its own animation. asmB sits the piece
+   *  elsewhere and, in `nested`, holds it inside an inner assembly. */
+  const siblings = (animB: Record<string, unknown> = {}) =>
+    normalizeProject({
+      meshes: [{ id: 'file', name: 'part.stl', ext: 'stl' }],
+      board: {
+        nodes: [
+          { id: 'piece', kind: 'mesh', meshId: 'file' },
+          { id: 'asmA', kind: 'assembly' },
+          { id: 'asmB', kind: 'assembly' },
+          { id: 'animA', kind: 'animation' },
+          { id: 'animB', kind: 'animation' },
+        ],
+        edges: [
+          { from: 'piece', to: 'asmA' },
+          { from: 'piece', to: 'asmB' },
+          { from: 'asmA', to: 'animA' },
+          { from: 'asmB', to: 'animB' },
+        ],
+      },
+      stages: {
+        asmA: { kind: 'assembly', members: [{ nodeId: 'piece', pose: pose(1) }] },
+        asmB: { kind: 'assembly', members: [{ nodeId: 'piece', pose: pose(2) }] },
+        animA: { kind: 'animation', tracks: [track('asmA/piece', [move(7)])] },
+        animB: { kind: 'animation', ...animB },
+      },
+    })!
+
+  it('finds the piece although it comes through another assembly', () => {
+    const p = siblings()
+    expect(poseSources(p, 'animB')).toEqual([{ stageId: 'animA', pieces: 1 }])
+    expect(x(importedPoses(p, 'animB', 'animA', 'end')['asmB/piece'])).toBeCloseTo(7)
+  })
+
+  it('puts it at the same place in the world when what holds it here was moved', () => {
+    // animB starts with its whole assembly shifted by 100
+    const p = siblings({ startPoses: { asmB: pose(100) } })
+    // world x = 7 over there → 7 − 100 relative to the shifted assembly here
+    expect(x(importedPoses(p, 'animB', 'animA', 'end')['asmB/piece'])).toBeCloseTo(-93)
+  })
+
+  it('finds a mesh wired straight into the other animation', () => {
+    const p = siblings()
+    p.board.edges.push({ id: 'direct', from: 'piece', to: 'animA' })
+    p.stages.animA.members.push({
+      nodeId: 'piece',
+      visible: true,
+      opacity: 1,
+      pose: pose(40),
+      color: null,
+    })
+    p.stages.animA.tracks = []
+    // two candidates over there (direct, and inside asmA): either is the piece
+    expect(Object.keys(importedPoses(p, 'animB', 'animA', 'end'))).toEqual(['asmB/piece'])
+  })
+
+  it('never moves an assembly to where another animation had a different one', () => {
+    const p = siblings()
+    expect(importedPoses(p, 'animB', 'animA', 'end')['asmB']).toBeUndefined()
   })
 })
 

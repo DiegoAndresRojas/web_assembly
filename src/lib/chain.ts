@@ -10,6 +10,7 @@
 //   - when the author imports positions from another animation
 //     (importedPoses).
 import { assemblyParts, membersOf, PART_SEP, restPoseOf } from './graph'
+import { composePoses, relativePose } from './rigid'
 import { poseAtTime, stageDuration, type StageEval } from './timeline'
 import type { Pose, Project, Track } from '@/types/project'
 
@@ -136,19 +137,53 @@ export function chainStartPoses(project: Project, asmId: string): Record<string,
 
 // ---------- start poses imported from another animation ----------
 
-/** The key piece `key` of one animation goes by in animation `fromStageId`:
- *  the same key, or — when the other animation plays an assembly that is
- *  nested deeper here — the tail of it. The other animation's own inputs
- *  only match under the very same key: nested here, they are posed
- *  relative to something else. */
-function keyIn(theirKeys: Set<string>, key: string): string | null {
-  if (theirKeys.has(key)) return key
+/** How many trailing segments two keys have in common. */
+function sharedTail(a: string[], b: string[]): number {
+  let n = 0
+  while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++
+  return n
+}
+
+/** The piece of the other animation that `key` is, and how it relates:
+ *
+ *  - `same`: what holds the piece is the same there (the very same key, or
+ *    the other animation plays an assembly that is nested deeper here), so
+ *    the piece's pose can be taken as it is;
+ *  - otherwise only the piece itself is the same board node, reached
+ *    through different assemblies (a duplicated assembly, a mesh wired
+ *    into two of them, …): its pose has to go through world space.
+ *
+ *  An assembly is only ever matched the first way — a later assembly's
+ *  placement of an earlier one is not something another animation undoes. */
+function matchIn(
+  project: Project,
+  theirKeys: string[],
+  key: string,
+): { key: string; same: boolean } | null {
+  if (theirKeys.includes(key)) return { key, same: true }
   const segs = key.split(PART_SEP)
-  for (let i = 1; i < segs.length - 1; i++) {
-    const tail = segs.slice(i).join(PART_SEP)
-    if (theirKeys.has(tail)) return tail
+  let best: { key: string; shared: number } | null = null
+  for (const their of theirKeys) {
+    const shared = sharedTail(segs, their.split(PART_SEP))
+    if (shared && (!best || shared > best.shared)) best = { key: their, shared }
   }
-  return null
+  if (!best) return null
+  // two segments or more in common: the same piece held by the same thing
+  if (best.shared >= 2) return { key: best.key, same: true }
+  const leaf = project.board.nodes.find((n) => n.id === segs[segs.length - 1])
+  return leaf?.kind === 'mesh' ? { key: best.key, same: false } : null
+}
+
+/** The keys from an animation's input down to `key`: `a`, `a/b`, `a/b/c`. */
+function pathKeys(key: string): string[] {
+  const segs = key.split(PART_SEP)
+  return segs.map((_, i) => segs.slice(0, i + 1).join(PART_SEP))
+}
+
+/** Where a piece is in an animation's world: every pose from its input
+ *  down to it, combined. */
+function worldPose(keys: string[], poseOf: (key: string) => Pose | null): Pose {
+  return keys.reduce((world, key) => composePoses(world, poseOf(key) ?? IDENTITY), IDENTITY)
 }
 
 /** The start poses animation `stageId` would take from animation
@@ -162,15 +197,41 @@ export function importedPoses(
   at: 'start' | 'end',
   only: string | null = null,
 ): Record<string, Pose> {
-  const theirs = new Set(stagePieces(project, fromStageId).map((p) => p.key))
+  const theirs = stagePieces(project, fromStageId).map((p) => p.key)
   const poses: Record<string, Pose> = {}
+  // parents first, so a piece is placed relative to where its parent ends up
+  const startOf = (key: string) => poses[key] ?? startPoseOf(project, stageId, key)
   for (const { key } of stagePieces(project, stageId)) {
     if (only && key !== only && !key.startsWith(only + PART_SEP)) continue
-    const theirKey = keyIn(theirs, key)
-    const pose = theirKey ? poseIn(project, fromStageId, theirKey, at) : null
+    const match = matchIn(project, theirs, key)
+    if (!match) continue
+    const their = (k: string) => poseIn(project, fromStageId, k, at)
+    let pose: Pose | null
+    if (match.same) pose = their(match.key)
+    else {
+      // same place in the world as over there, expressed in what holds it here
+      const parent = worldPose(pathKeys(key).slice(0, -1), startOf)
+      pose = relativePose(parent, worldPose(pathKeys(match.key), their))
+    }
     if (pose) poses[key] = pose
   }
   return poses
+}
+
+function samePose(a: Pose, b: Pose): boolean {
+  const eps = 1e-4
+  return (['pos', 'rot'] as const).every((k) =>
+    (['x', 'y', 'z'] as const).every((axis) => Math.abs(a[k][axis] - b[k][axis]) < eps),
+  )
+}
+
+/** How many of `poses` would actually move their piece from where it
+ *  starts in `stageId` now. */
+export function movedBy(project: Project, stageId: string, poses: Record<string, Pose>): number {
+  return Object.entries(poses).filter(([key, pose]) => {
+    const now = startPoseOf(project, stageId, key)
+    return !now || !samePose(now, pose)
+  }).length
 }
 
 export interface PoseSource {

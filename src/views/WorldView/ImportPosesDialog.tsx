@@ -4,7 +4,7 @@ import { Button } from '@/components/Button'
 import { Dialog } from '@/components/Dialog'
 import { Segmented } from '@/components/Segmented'
 import { stageName } from '@/lib/cameras'
-import { poseSources } from '@/lib/chain'
+import { importedPoses, movedBy, poseSources } from '@/lib/chain'
 import { inputLabel, nodeById } from '@/lib/graph'
 import { useStore } from '@/store'
 import type { Project } from '@/types/project'
@@ -40,6 +40,10 @@ export function ImportPosesDialog({
   const [moment, setMoment] = useState<'start' | 'end'>('end')
   const [onlySelected, setOnlySelected] = useState(false)
   const only = onlySelected ? selectedKey : null
+  // what this import would do, so "nothing happened" is never a surprise
+  const poses = from === ASSEMBLED ? {} : importedPoses(project, stageId, from, moment, only)
+  const found = Object.keys(poses).length
+  const moving = movedBy(project, stageId, poses)
 
   return (
     <Dialog
@@ -121,6 +125,22 @@ export function ImportPosesDialog({
           ? 'The pieces go back to where their assembly put them.'
           : 'Only where the pieces start changes. Their tracks start there too; the actions on them stay as they are.'}
       </div>
+      {from !== ASSEMBLED && (
+        <div
+          role="status"
+          style={{
+            marginTop: 'var(--space-2)',
+            fontSize: 11,
+            color: moving ? 'var(--color-accent-300)' : 'var(--color-neutral-400)',
+          }}
+        >
+          {found === 0
+            ? 'None of the pieces in scope are in that animation.'
+            : moving === 0
+              ? `${found} ${found === 1 ? 'piece' : 'pieces'} found, but ${moment === 'end' ? 'that animation ends' : 'that animation starts'} with ${found === 1 ? 'it' : 'them'} exactly where ${found === 1 ? 'it is' : 'they are'} here — nothing will move.`
+              : `${moving} of ${found} ${found === 1 ? 'piece' : 'pieces'} will move.`}
+        </div>
+      )}
     </Dialog>
   )
 }
