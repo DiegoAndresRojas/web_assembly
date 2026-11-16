@@ -40,6 +40,8 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.aid = nodeId
         state.wmode = node ? wmodeForKind(node.kind) : 'assembly'
         state.kpOn = false
+        state.pendingPicks = []
+        state.asmOpen = []
         state.hint = 'Loading…'
         state.worldSelId = null
         state.playing = false

@@ -127,6 +127,18 @@ export interface Stage {
   /** Visibility / opacity of pieces inside assembly inputs, by part key
    *  (an animation can hide or fade a single piece of an assembly). */
   partLooks: Record<string, PartLook>
+  /** Pieces of this stage's assembly inputs that were unlocked from them,
+   *  by part key (`asmNodeId/pieceNodeId`). */
+  partOverrides: Record<string, PartOverride>
+}
+
+/** A piece of an assembly input taken out of the pose it was assembled in.
+ *  `free`: released from the assembly — a body of its own in this stage,
+ *  `pose` in the stage's space. Not free: re-attached where it was left,
+ *  `pose` relative to the assembly, moving with it again. */
+export interface PartOverride {
+  free: boolean
+  pose: Pose
 }
 
 export interface PartLook {

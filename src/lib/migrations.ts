@@ -12,6 +12,7 @@ import type {
   MeshRecord,
   NodeKind,
   PartLook,
+  PartOverride,
   Pose,
   Project,
   Stage,
@@ -31,9 +32,10 @@ import type {
 // 8: observer nodes removed altogether (with their stages and edges); the
 //    end-user player is being rebuilt as its own read-only mode.
 // 9: per-stage camera frame format (16:9 until chosen otherwise).
+// 10: pieces unlocked from assembly inputs (partOverrides).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 9
+export const CURRENT_VERSION = 10
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -170,6 +172,17 @@ function normalizePartLooks(raw: unknown): Record<string, PartLook> {
   return out
 }
 
+function normalizePartOverrides(raw: unknown): Record<string, PartOverride> {
+  const out: Record<string, PartOverride> = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue
+    const o = v as Record<string, unknown>
+    out[key] = { free: o.free === true, pose: normalizePose(o.pose) }
+  }
+  return out
+}
+
 export function normalizeStage(raw: unknown): Stage {
   const s = (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}) as Record<
     string,
@@ -198,6 +211,7 @@ export function normalizeStage(raw: unknown): Stage {
       : [],
     union: s.union && typeof s.union === 'object' ? (s.union as { at: number }) : null,
     partLooks: normalizePartLooks(s.partLooks),
+    partOverrides: normalizePartOverrides(s.partOverrides),
   }
 }
 

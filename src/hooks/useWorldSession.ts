@@ -12,7 +12,15 @@ import { useEffect, useState } from 'react'
 
 import type { Object3D } from 'three'
 
-import { assemblyParts, membersOf, parentKey, restPoseOf } from '@/lib/graph'
+import { isFreePart, linkedBodies } from '@/lib/assembly'
+import {
+  assemblyParts,
+  membersOf,
+  parentKey,
+  PART_SEP,
+  partLocalPose,
+  restPoseOf,
+} from '@/lib/graph'
 import { evalStage, stageDuration } from '@/lib/timeline'
 import { aspectOf } from '@/lib/videoFormat'
 import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
@@ -118,9 +126,16 @@ function applyPartLooks(session: WorldSession, project: Project, stageId: string
       const look = stage.partLooks?.[part.key]
       const opacity = (opacityOf.get(parentKey(part.key) ?? '') ?? 1) * (look?.opacity ?? 1)
       opacityOf.set(part.key, opacity)
-      const obj = session.getObject(part.key)
+      // (the piece in the group, not the stage object a released one becomes)
+      const obj = session.getNested(part.key)
       if (!obj) continue
       obj.visible = look?.visible ?? true
+      if (stage.kind === 'assembly' && part.depth === 1) {
+        // a released piece is shown by its own stage object (sceneEntries);
+        // a piece locked somewhere else sits there, the rest as assembled
+        if (isFreePart(stage, part.key)) obj.visible = false
+        else applyPose(obj, partLocalPose(stage, row.node.id, part.node.id, part.pose))
+      }
       // meshes take the product; nested assemblies just pass it down
       if (part.mesh) applyOpacity(obj, opacity)
     }
@@ -175,31 +190,58 @@ interface SceneEntry {
   key: string
   row: MembersRow
   member: StageMember
-  /** An assembly's output inside another assembly is, for now, only there
-   *  to look at: no selection, no keypoints on it. */
-  viewOnly: boolean
 }
 
-/** What should be on screen for `stageId`: its own inputs. */
+/** What should be on screen for `stageId` as objects of their own: its
+ *  inputs and, in an assembly, the pieces released from assembly inputs
+ *  (keyed by part key, posed in the stage's space). */
 function sceneEntries(project: Project, stageId: string): SceneEntry[] {
   const stage = project.stages[stageId]
   if (!stage) return []
-  return membersOf(project, stageId).flatMap((row) => {
+  const rows = membersOf(project, stageId)
+  const entries: SceneEntry[] = rows.flatMap((row) => {
     const member = stage.members.find((m) => m.nodeId === row.node.id)
-    if (!member) return []
-    const viewOnly = stage.kind === 'assembly' && !row.mesh
-    return [{ key: row.node.id, row, member, viewOnly }]
+    return member ? [{ key: row.node.id, row, member }] : []
   })
+  if (stage.kind !== 'assembly') return entries
+  for (const [key, override] of Object.entries(stage.partOverrides)) {
+    if (!override.free) continue
+    const [asmId, pieceId, ...deeper] = key.split(PART_SEP)
+    const asm = entries.find((e) => e.key === asmId && !e.row.mesh)
+    const row = deeper.length ? null : membersOf(project, asmId).find((r) => r.node.id === pieceId)
+    if (!asm || !row) continue
+    const assembled = project.stages[asmId]?.members.find((m) => m.nodeId === pieceId)
+    entries.push({
+      key,
+      row,
+      member: {
+        nodeId: key,
+        visible: asm.member.visible,
+        opacity: asm.member.opacity,
+        pose: override.pose,
+        color: assembled?.color ?? null,
+      },
+    })
+  }
+  return entries
 }
 
-function applyEntry(obj: Object3D, { row, member, viewOnly }: SceneEntry, withPose: boolean): void {
+function applyEntry(obj: Object3D, { row, member }: SceneEntry, withPose: boolean): void {
   if (withPose) applyPose(obj, member.pose)
   // an assembly input carries its pieces' scales inside it
   obj.scale.setScalar(row.mesh ? (row.node.scale ?? 1) : 1)
   applyColor(obj, member.color ?? row.node.color)
   applyOpacity(obj, member.opacity)
   obj.visible = member.visible
-  obj.userData.msViewOnly = viewOnly
+}
+
+/** What moves rigidly with a dragged stage object: in an assembly,
+ *  everything tied to it by keypoint links. */
+function companionsOf(id: string): string[] {
+  const state = useStore.getState()
+  if (state.wmode !== 'assembly') return []
+  const stage = selectCurrentProject(state)?.stages[state.aid ?? '']
+  return stage ? linkedBodies(stage.links, id) : []
 }
 
 /** Keys whose object is being built right now, so repeated syncs while a
@@ -223,7 +265,9 @@ function syncSession(session: WorldSession, stageId: string): void {
   let inFlight = building.get(session)
   if (!inFlight) building.set(session, (inFlight = new Set()))
   for (const entry of entries) {
-    const existing = session.getObject(entry.key)
+    // (not getObject: a released piece's key also names the piece it left
+    // behind in its assembly's group)
+    const existing = session.objects.get(entry.key)
     if (existing) {
       applyEntry(existing, entry, true)
       continue
@@ -268,6 +312,7 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       onPick,
       onFrame,
       onObjectMoved,
+      companionsOf,
     })
     currentSession = created
     setSession(created)

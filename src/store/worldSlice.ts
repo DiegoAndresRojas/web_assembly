@@ -85,9 +85,15 @@ export function createWorldSlice(set: Set): WorldActions {
           for (const key of Object.keys(stage.partLooks ?? {})) {
             if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
           }
-          stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
+          // (pieces released from the removed input go with it)
+          for (const key of Object.keys(stage.partOverrides)) {
+            if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]
+          }
+          stage.links = stage.links.filter(
+            (l) => !keyRefersTo(l.nodeA, nodeId) && !keyRefersTo(l.nodeB, nodeId),
+          )
         }
-        if (state.worldSelId === nodeId) state.worldSelId = null
+        if (state.worldSelId && keyRefersTo(state.worldSelId, nodeId)) state.worldSelId = null
       })
     },
 

@@ -101,6 +101,37 @@ export function DownloadIcon(props: IconProps) {
   )
 }
 
+// ---------- assembly locks (24×24 geometry) ----------
+export function LockIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"
+    />
+  )
+}
+
+export function LockOpenIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M7 10V7a5 5 0 0 1 9.53-2.11l-1.81.84A3 3 0 0 0 9 7v3h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Z"
+    />
+  )
+}
+
+export function RestoreIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M12 5a7 7 0 1 1-6.3 3.9l1.8.9A5 5 0 1 0 12 7v3L7.5 6 12 2v3Z"
+    />
+  )
+}
+
 // ---------- transport / timeline (24×24 geometry) ----------
 
 export function PlayIcon(props: IconProps) {

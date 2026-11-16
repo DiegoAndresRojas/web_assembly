@@ -5,7 +5,7 @@
 // origin, so at an identity pose it sits exactly where it was assembled.
 import * as THREE from 'three'
 
-import { membersOf } from '@/lib/graph'
+import { membersOf, PART_SEP, partLocalPose } from '@/lib/graph'
 import { applyColor, applyOpacity, applyPose, buildMesh } from './buildMesh'
 import type { MembersRow, Project, StageMember } from '@/types/project'
 
@@ -34,6 +34,16 @@ async function buildStageOutput(
         ? await buildMesh(row.mesh)
         : await buildStageOutput(project, row.node.id, nextPath)
       applyPose(obj, member.pose ?? IDENTITY)
+      // pieces this stage unlocked from an assembly input sit where it
+      // left them, not where that assembly put them
+      if (!row.mesh) {
+        for (const piece of obj.children) {
+          const pieceId = piece.userData.msNodeId as string | undefined
+          if (pieceId && stage?.partOverrides?.[row.node.id + PART_SEP + pieceId]) {
+            applyPose(piece, partLocalPose(stage, row.node.id, pieceId, IDENTITY))
+          }
+        }
+      }
       if (row.mesh) obj.scale.setScalar(row.node.scale ?? 1)
       applyColor(obj, member.color ?? row.node.color)
       obj.userData.msNodeId = row.node.id

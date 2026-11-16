@@ -1,6 +1,7 @@
 import { Button } from '@/components/Button'
 import { Segmented } from '@/components/Segmented'
 import { TrashIcon } from '@/components/icons'
+import { bodyPose } from '@/lib/assembly'
 import { inputLabel } from '@/lib/graph'
 import { useStore } from '@/store'
 import type { Project, Stage } from '@/types/project'
@@ -35,9 +36,8 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
   const openDownload = useStore((s) => s.openDownload)
 
   const editingLink = kpEditing ? stage.links.find((l) => l.id === kpEditing) : null
-  const editingMemberB = editingLink
-    ? stage.members.find((m) => m.nodeId === editingLink.nodeB)
-    : null
+  const poseB = editingLink ? bodyPose(stage, editingLink.nodeB) : null
+  const editingMemberB = poseB ? { pose: poseB } : null
 
   return (
     <>

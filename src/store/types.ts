@@ -10,6 +10,7 @@ import type {
   Axis,
   FrameFormat,
   KeypointLink,
+  PartOverride,
   PickHit,
   Pose,
   Project,
@@ -166,6 +167,7 @@ export interface StageSnapshot {
   links: KeypointLink[]
   tracks: Track[]
   camera: StageCamera | null
+  partOverrides: Record<string, PartOverride>
 }
 
 export interface HistoryState {
@@ -190,6 +192,8 @@ export interface AssemblyState {
   kpMode: SnapMode
   pendingPicks: PickHit[]
   kpEditing: string | null
+  /** Assembly inputs whose lock was opened: their pieces are listed. */
+  asmOpen: string[]
   gapPending: { linkId: string; gap: number } | null
 }
 
@@ -197,9 +201,17 @@ export interface AssemblyActions {
   toggleKp: (on: boolean) => void
   setKpMode: (mode: SnapMode) => void
   pickPoint: (hit: PickHit) => void
-  /** Persists a member pose edited directly in the viewport (gizmo),
-   *  as an undoable step. */
+  /** Persists a pose edited directly in the viewport (gizmo), as an
+   *  undoable step — of a stage input or a released piece; whatever is
+   *  linked to it moves along. */
   setMemberPose: (nodeId: string, pose: Pose) => void
+  /** Shows / hides the pieces of an assembly input in the panel (its lock). */
+  toggleAsmOpen: (asmId: string) => void
+  /** Releases a piece (by part key) from its assembly input, or locks a
+   *  released one back in where it is now. */
+  togglePartLock: (key: string) => void
+  /** Puts a piece back exactly as its assembly had it. */
+  restorePart: (key: string) => void
   removeLink: (linkId: string) => void
   acceptGap: () => void
   rejectGap: () => void

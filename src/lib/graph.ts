@@ -1,5 +1,6 @@
 // Read-only queries over a project's board graph (nodes + edges). Typed
 // port of only_js/src/composables/useGraph.js.
+import { relativePose } from './rigid'
 import type {
   BoardEdge,
   BoardNode,
@@ -8,6 +9,7 @@ import type {
   NodeKind,
   Pose,
   Project,
+  Stage,
 } from '@/types/project'
 
 export function nodeById(project: Project | null, id: string | null): BoardNode | null {
@@ -112,8 +114,31 @@ function collectParts(
     const key = prefix + PART_SEP + row.node.id
     const self = { key, node: row.node, mesh: row.mesh, depth, pose: member?.pose ?? IDENTITY }
     if (row.mesh) return [self]
-    return [self, ...assemblyParts(project, row.node.id, key, depth + 1, nextPath)]
+    // the pieces of an assembly input sit where that assembly put them,
+    // unless this stage unlocked them from it
+    const inner = assemblyParts(project, row.node.id, key, depth + 1, nextPath).map((part) =>
+      part.depth === depth + 1
+        ? { ...part, pose: partLocalPose(stage, row.node.id, part.node.id, part.pose) }
+        : part,
+    )
+    return [self, ...inner]
   })
+}
+
+/** Where a piece of assembly input `asmId` sits relative to that assembly
+ *  in `stage`: its assembled pose, or what the stage's override for it
+ *  (see PartOverride) works out to. */
+export function partLocalPose(
+  stage: Stage | undefined,
+  asmId: string,
+  pieceId: string,
+  assembled: Pose,
+): Pose {
+  const override = stage?.partOverrides?.[asmId + PART_SEP + pieceId]
+  if (!override) return assembled
+  if (!override.free) return override.pose
+  const asmPose = stage?.members.find((m) => m.nodeId === asmId)?.pose ?? IDENTITY
+  return relativePose(asmPose, override.pose)
 }
 
 /** The key one level up (`asm/inner/mesh` → `asm/inner`), or null for a

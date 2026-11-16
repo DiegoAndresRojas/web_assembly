@@ -43,6 +43,9 @@ export interface WorldSessionOptions {
   onFrame?: (dt: number) => void
   /** Fired when a gizmo drag ends, with the object's new pose. */
   onObjectMoved?: (id: string, pose: Pose) => void
+  /** Ids of the stage objects that move rigidly with `id` while it is
+   *  dragged (e.g. linked by keypoints). */
+  companionsOf?: (id: string) => string[]
 }
 
 export class WorldSession {
@@ -143,8 +146,12 @@ export class WorldSession {
     gizmo.addEventListener('dragging-changed', (e) => {
       controls.enabled = !e.value && !this.locked && !this.cameraDriven
       const obj = this.selectedId ? this.getObject(this.selectedId) : null
+      if (e.value) this.beginCompanionDrag(obj)
+      else this.companionDrag = null
       if (!e.value && obj && this.selectedId) opts.onObjectMoved?.(this.selectedId, readPose(obj))
     })
+    // whatever is tied to the dragged object follows it as it moves
+    gizmo.addEventListener('objectChange', () => this.moveCompanions())
     this.gizmoHelper = gizmo.getHelper()
     scene.add(this.gizmoHelper)
     this.gizmo = gizmo
@@ -201,8 +208,7 @@ export class WorldSession {
 
     let best: { id: string; hit: THREE.Intersection } | null = null
     for (const [id, obj] of this.objects) {
-      // view-only objects (set by hooks/useWorldSession.ts) are never picked
-      if (!obj.visible || obj.userData.msViewOnly) continue
+      if (!obj.visible) continue
       // three's raycaster ignores `visible` — skip pieces hidden inside
       const hit = this.raycaster.intersectObject(obj, true).find((h) => shownUpTo(h.object, obj))
       if (hit && (!best || hit.distance < best.hit.distance)) best = { id, hit }
@@ -481,6 +487,53 @@ export class WorldSession {
       obj = obj?.children.find((c) => c.userData.msNodeId === seg)
     }
     return obj ?? null
+  }
+
+  /** A piece inside an assembly input by its part key, always the one in
+   *  the group — even when the same key also names a stage object of its
+   *  own (a piece released from the assembly). */
+  getNested(key: string): THREE.Object3D | null {
+    const [top, ...rest] = key.split('/')
+    let obj: THREE.Object3D | undefined = rest.length ? this.objects.get(top) : undefined
+    for (const seg of rest) {
+      obj = obj?.children.find((c) => c.userData.msNodeId === seg)
+    }
+    return obj ?? null
+  }
+
+  private companionDrag: {
+    object: THREE.Object3D
+    startInverse: THREE.Matrix4
+    companions: Array<{ object: THREE.Object3D; start: THREE.Matrix4 }>
+  } | null = null
+
+  /** A gizmo drag starts on `obj`: note where it and its companions (see
+   *  WorldSessionOptions.companionsOf) are, to carry them along. */
+  private beginCompanionDrag(obj: THREE.Object3D | null): void {
+    this.companionDrag = null
+    const ids = obj && this.selectedId ? (this.opts.companionsOf?.(this.selectedId) ?? []) : []
+    if (!obj || !ids.length) return
+    obj.updateMatrix()
+    const companions = ids
+      .map((id) => this.objects.get(id))
+      .filter((o): o is THREE.Object3D => !!o && o !== obj)
+      .map((object) => {
+        object.updateMatrix()
+        return { object, start: object.matrix.clone() }
+      })
+    this.companionDrag = { object: obj, startInverse: obj.matrix.clone().invert(), companions }
+  }
+
+  private moveCompanions(): void {
+    const drag = this.companionDrag
+    if (!drag) return
+    drag.object.updateMatrix()
+    const delta = drag.object.matrix.clone().multiply(drag.startInverse)
+    const scale = new THREE.Vector3()
+    for (const { object, start } of drag.companions) {
+      // (each companion keeps its own scale: `scale` is only decomposed into)
+      delta.clone().multiply(start).decompose(object.position, object.quaternion, scale)
+    }
   }
 
   setSelected(id: string | null): void {

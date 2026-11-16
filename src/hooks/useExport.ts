@@ -3,6 +3,7 @@
 // views call this hook and get back plain functions to wire to buttons.
 import { useCallback } from 'react'
 
+import { isFreePart } from '@/lib/assembly'
 import { triggerDownload } from '@/lib/download'
 import { stageDuration } from '@/lib/timeline'
 import { exportGroup, type DownloadFormat } from '@/lib/three/buildMesh'
@@ -29,10 +30,12 @@ export function useExport(session: WorldSession | null) {
     const project = projects.find((p) => p.id === pid)
     const stage = project && aid ? project.stages[aid] : null
     if (!session || !stage) return
-    const objects = stage.members
-      .filter((m) => m.visible)
-      .map((m) => session.getObject(m.nodeId))
-      .filter((o): o is NonNullable<typeof o> => !!o)
+    // the stage's inputs, plus the pieces released from assembly inputs
+    // (stage objects of their own, keyed by part key)
+    const released = Object.keys(stage.partOverrides).filter((key) => isFreePart(stage, key))
+    const objects = [...stage.members.filter((m) => m.visible).map((m) => m.nodeId), ...released]
+      .map((id) => session.objects.get(id))
+      .filter((o): o is NonNullable<typeof o> => !!o && o.visible)
     if (!objects.length) {
       state.closeDownload()
       return

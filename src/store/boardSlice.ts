@@ -172,7 +172,12 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         for (const stageId in project.stages) {
           const stage = project.stages[stageId]
           stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
-          stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
+          stage.links = stage.links.filter(
+            (l) => !keyRefersTo(l.nodeA, nodeId) && !keyRefersTo(l.nodeB, nodeId),
+          )
+          for (const key of Object.keys(stage.partOverrides)) {
+            if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]
+          }
           stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
           for (const key of Object.keys(stage.partLooks ?? {})) {
             if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]

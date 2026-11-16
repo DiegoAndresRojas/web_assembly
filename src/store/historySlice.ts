@@ -22,6 +22,7 @@ function snapshot(stage: Stage): StageSnapshot {
       links: stage.links,
       tracks: stage.tracks,
       camera: stage.camera,
+      partOverrides: stage.partOverrides,
     }),
   )
 }
@@ -31,6 +32,7 @@ function restore(stage: Stage, snap: StageSnapshot): void {
   stage.links = snap.links
   stage.tracks = snap.tracks
   stage.camera = snap.camera
+  stage.partOverrides = snap.partOverrides ?? {}
 }
 
 export function createHistorySlice(set: Set, get: Get): HistoryActions {
