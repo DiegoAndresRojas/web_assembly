@@ -1,8 +1,12 @@
 import type { PointerEvent } from 'react'
 
 import { FilmIcon, LinkHandleIcon, PlusIcon } from '@/components/icons'
+import { NameField } from '@/components/NameField'
+import { stageName } from '@/lib/cameras'
 import { MESH_H, MESH_W, NODE_W } from '@/lib/constants'
 import type { BoardNode as BoardNodeData, MeshRecord } from '@/types/project'
+
+const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 const STAGE_COLOR: Record<string, string> = {
   assembly: 'var(--color-accent)',
@@ -21,6 +25,7 @@ export interface BoardNodeProps {
   onDoubleClick: () => void
   onDelete: (e: PointerEvent) => void
   onDuplicate: (e: PointerEvent) => void
+  onRename: (name: string) => void
   onColor: (e: PointerEvent) => void
   onScale: (e: PointerEvent) => void
   onLinkStart: (e: PointerEvent) => void
@@ -38,6 +43,7 @@ export function BoardNode({
   onDoubleClick,
   onDelete,
   onDuplicate,
+  onRename,
   onColor,
   onScale,
   onLinkStart,
@@ -83,6 +89,17 @@ export function BoardNode({
             whiteSpace: 'nowrap',
           }}
         >
+          {!isMesh && (
+            // (its own pointer events: a press here is not a drag of the node)
+            <span onPointerDown={(e) => e.stopPropagation()} onDoubleClick={stop}>
+              <NameField
+                label={node.kind === 'animation' ? 'Animation name' : 'Assembly name'}
+                value={stageName(node)}
+                onRename={onRename}
+                style={{ width: 130, fontSize: 12 }}
+              />
+            </span>
+          )}
           {isMesh && (
             <>
               <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onColor}>
@@ -277,7 +294,7 @@ export function BoardNode({
               whiteSpace: 'nowrap',
             }}
           >
-            {node.label}
+            {stageName(node)}
           </div>
         </>
       )}

@@ -27,7 +27,7 @@ export function timelineRows(project: Project, stageId: string, stage: Stage): T
       track,
       key,
       depth,
-      label: key ? inputLabel(project, key) : 'Camera',
+      label: key ? inputLabel(project, key) : (stage.camera?.name ?? 'Camera'),
       tag: key ? tagFor(key) : 'CAM',
     })
   }

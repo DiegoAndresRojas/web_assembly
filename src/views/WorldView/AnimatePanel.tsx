@@ -5,18 +5,22 @@ import {
   CameraTrackIcon,
   ChevronRightIcon,
   EyeIcon,
+  ImportIcon,
   OpacityIcon,
   PlusIcon,
   RecordIcon,
   TrashIcon,
 } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
+import { NameField } from '@/components/NameField'
 import { recordCameraFromView } from '@/hooks/useShortcuts'
+import { cameraSources } from '@/lib/cameras'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { assemblyParts, membersOf, type AssemblyPart } from '@/lib/graph'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import type { PartLook, Project, Stage } from '@/types/project'
+import { ImportCameraDialog } from './ImportCameraDialog'
 import { MemberRow } from './MemberRow'
 
 export interface AnimatePanelProps {
@@ -181,7 +185,20 @@ function PartRow({
 
 /** The animation camera's row: select it (in the viewport too), look
  *  through it, shoot it from the current view, delete it. */
-function CameraRow({ stage, session }: { stage: Stage; session: WorldSession | null }) {
+function CameraRow({
+  project,
+  stageId,
+  stage,
+  session,
+}: {
+  project: Project
+  stageId: string
+  stage: Stage
+  session: WorldSession | null
+}) {
+  const [importing, setImporting] = useState(false)
+  const setCameraName = useStore((s) => s.setCameraName)
+  const sources = cameraSources(project, stageId)
   const worldSelId = useStore((s) => s.worldSelId)
   const cameraView = useStore((s) => s.cameraView)
   const selectWorldObject = useStore((s) => s.selectWorldObject)
@@ -221,11 +238,34 @@ function CameraRow({ stage, session }: { stage: Stage; session: WorldSession | n
         </IconButton>
       )}
       <CameraTrackIcon size={13} style={{ color: 'var(--color-neutral-400)' }} />
-      <span
-        style={{ flex: 1, fontSize: 11, color: camTrack ? undefined : 'var(--color-neutral-500)' }}
-      >
-        {camTrack ? 'Camera' : 'Camera (none yet)'}
-      </span>
+      {camTrack && stage.camera ? (
+        <NameField
+          label="Camera name"
+          value={stage.camera.name}
+          onRename={setCameraName}
+          style={{ flex: 1, fontSize: 11 }}
+        />
+      ) : (
+        <span style={{ flex: 1, fontSize: 11, color: 'var(--color-neutral-500)' }}>
+          Camera (none yet)
+        </span>
+      )}
+      {sources.length > 0 && (
+        <IconButton
+          title="Import a camera — start from where another animation's camera is"
+          aria-label="Import a camera from another animation"
+          onClick={() => setImporting(true)}
+        >
+          <ImportIcon size={13} />
+        </IconButton>
+      )}
+      {importing && (
+        <ImportCameraDialog
+          sources={sources}
+          hasCamera={!!camTrack}
+          onClose={() => setImporting(false)}
+        />
+      )}
       {camTrack && (
         <>
           <IconButton
@@ -307,7 +347,7 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
           gap: 1,
         }}
       >
-        <CameraRow stage={stage} session={session} />
+        <CameraRow project={project} stageId={stageId} stage={stage} session={session} />
 
         {membersOf(project, stageId).map((row) => {
           const member = stage.members.find((m) => m.nodeId === row.node.id)

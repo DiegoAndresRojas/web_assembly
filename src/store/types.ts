@@ -121,6 +121,8 @@ export interface BoardActions {
   linkIfDropped: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
   hoverNode: (nodeId: string | null) => void
+  /** Names a stage node (what its row, breadcrumb and imports show). */
+  renameNode: (nodeId: string, label: string) => void
   /** Adds an independent copy of a node next to it and selects the copy. */
   duplicateNode: (nodeId: string) => void
   deleteNode: (nodeId: string) => void
@@ -261,6 +263,11 @@ export interface AnimationActions {
 
   addMeshTrack: (nodeId: string) => void
   addCameraTrack: (currentCameraPose?: Pose) => void
+  setCameraName: (name: string) => void
+  /** Starts the open animation's camera from the pose another
+   *  animation's camera has when that animation starts or ends (creating
+   *  the camera here if there is none yet). */
+  importCamera: (fromStageId: string, at: 'start' | 'end') => void
   removeTrack: (trackId: string) => void
   confirmRemoveTrack: () => void
   onCamKill: () => void

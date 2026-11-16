@@ -2,6 +2,7 @@
 // input, a part inside one, or the camera) holding chained move actions,
 // plus the timeline's own UI state (playhead, zoom, snapping, selection).
 // Every committed edit is undoable through the shared history slice.
+import { cameraSources, DEFAULT_CAMERA_NAME } from '@/lib/cameras'
 import { effectiveTrack } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { inputLabel, partForKey, restPoseOf } from '@/lib/graph'
@@ -148,6 +149,7 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         if (!stage) return
         if (!stage.camera) {
           stage.camera = {
+            name: DEFAULT_CAMERA_NAME,
             pose: currentCameraPose ?? { pos: { x: 4, y: 3, z: 5 }, rot: { x: 0, y: 0, z: 0 } },
             tracked: true,
           }
@@ -155,6 +157,39 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         if (!stage.tracks.some((t) => t.targetKind === 'camera')) {
           stage.tracks.push(normalizeTrack({ targetKind: 'camera', initPose: stage.camera.pose })!)
         }
+      })
+    },
+    setCameraName(name) {
+      set((state) => {
+        const camera = openStage(state)?.stage.camera
+        if (camera && name.trim()) camera.name = name.trim()
+      })
+    },
+    importCamera(fromStageId, at) {
+      const { pid, aid, projects } = get()
+      const project = projects.find((p) => p.id === pid)
+      const source = project
+        ? cameraSources(project, aid).find((s) => s.stageId === fromStageId)
+        : undefined
+      if (!source) return
+      const pose = clonePose(at === 'start' ? source.start : source.end)
+      pushHistory()
+      set((state) => {
+        const stage = openStage(state)?.stage
+        if (!stage) return
+        // a camera made by importing takes the name it came with; one that
+        // was already here keeps its own and only starts somewhere else
+        if (!stage.camera) stage.camera = { name: source.name, pose, tracked: true }
+        else stage.camera.pose = pose
+        const track = stage.tracks.find((t) => t.targetKind === 'camera')
+        if (track) track.initPose = clonePose(pose)
+        else stage.tracks.push(normalizeTrack({ targetKind: 'camera', initPose: pose })!)
+        const cam = stage.tracks.find((t) => t.targetKind === 'camera')
+        state.worldSelId = ANIM_CAMERA_KEY
+        if (cam) state.selection = { trackId: cam.id, actionId: 'init' }
+        // show where it starts
+        state.playT = 0
+        state.playing = false
       })
     },
     removeTrack(trackId) {
@@ -198,7 +233,11 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
       const camTrack = stage?.tracks.find((t) => t.targetKind === 'camera')
       if (camTrack && camTrack.actions.length) {
         set((state) => {
-          state.confirm = { kind: 'camera', id: camTrack.id, label: 'Camera' }
+          state.confirm = {
+            kind: 'camera',
+            id: camTrack.id,
+            label: stage?.camera?.name ?? DEFAULT_CAMERA_NAME,
+          }
         })
         return
       }

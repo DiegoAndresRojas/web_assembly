@@ -101,6 +101,17 @@ export function DownloadIcon(props: IconProps) {
   )
 }
 
+/** An arrow coming into a tray: bring something in from elsewhere. */
+export function ImportIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4L11 12.2V3ZM4 15h2v4h12v-4h2v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5Z"
+    />
+  )
+}
+
 // ---------- assembly locks (24×24 geometry) ----------
 export function LockIcon(props: IconProps) {
   return (

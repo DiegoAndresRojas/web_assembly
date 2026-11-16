@@ -176,7 +176,7 @@ export function inputLabel(project: Project | null, nodeId: string | null): stri
   const node = nodeById(project, last)
   if (!node) return '?'
   if (node.kind === 'mesh') return meshFor(project, node)?.name ?? '?'
-  return node.label ?? node.kind
+  return node.label?.trim() || node.kind
 }
 
 /** Whether `toId` is reachable from `fromId` following board edges. */

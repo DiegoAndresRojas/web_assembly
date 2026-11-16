@@ -41,6 +41,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const hoverNode = useStore((s) => s.hoverNode)
   const deleteNode = useStore((s) => s.deleteNode)
   const duplicateNode = useStore((s) => s.duplicateNode)
+  const renameNode = useStore((s) => s.renameNode)
   const zoomBy = useStore((s) => s.zoomBy)
   const startLinking = useStore((s) => s.startLinking)
   const updateLinking = useStore((s) => s.updateLinking)
@@ -175,6 +176,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
               e.stopPropagation()
               deleteNode(node.id)
             }}
+            onRename={(name) => renameNode(node.id, name)}
             onDuplicate={(e) => {
               e.stopPropagation()
               duplicateNode(node.id)

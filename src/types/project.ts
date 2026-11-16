@@ -108,6 +108,9 @@ export interface Track {
 }
 
 export interface StageCamera {
+  /** What the author calls it — how it is told apart when another
+   *  animation imports it. */
+  name: string
   pose: Pose
   tracked: boolean
 }

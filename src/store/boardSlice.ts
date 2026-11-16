@@ -149,6 +149,12 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         state.hover = nodeId
       })
     },
+    renameNode(nodeId, label) {
+      set((state) => {
+        const node = findProject(state, state.pid)?.board.nodes.find((n) => n.id === nodeId)
+        if (node && node.kind !== 'mesh' && label.trim()) node.label = label.trim()
+      })
+    },
     duplicateNode(nodeId) {
       set((state) => {
         const project = findProject(state, state.pid)

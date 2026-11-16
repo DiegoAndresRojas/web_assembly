@@ -160,7 +160,7 @@ export function ActionInspector({
             textOverflow: 'ellipsis',
           }}
         >
-          {isCam ? 'Camera' : inputLabel(project, key)}
+          {isCam ? (stage.camera?.name ?? 'Camera') : inputLabel(project, key)}
         </div>
         <div className="text-muted" style={{ fontSize: 10 }}>
           {subtitle}

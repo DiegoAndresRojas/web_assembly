@@ -34,9 +34,10 @@ import type {
 // 9: per-stage camera frame format (16:9 until chosen otherwise).
 // 10: pieces unlocked from assembly inputs (partOverrides).
 // 11: tracks may start where the piece already is (initLinked).
+// 12: animation cameras have a name.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 11
+export const CURRENT_VERSION = 12
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -186,6 +187,10 @@ function normalizePartOverrides(raw: unknown): Record<string, PartOverride> {
   return out
 }
 
+function cameraName(raw: unknown): string {
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : 'Camera'
+}
+
 export function normalizeStage(raw: unknown): Stage {
   const s = (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}) as Record<
     string,
@@ -195,6 +200,7 @@ export function normalizeStage(raw: unknown): Stage {
   const camera =
     s.camera && typeof s.camera === 'object'
       ? {
+          name: cameraName((s.camera as Record<string, unknown>).name),
           pose: normalizePose((s.camera as Record<string, unknown>).pose),
           tracked: !!(s.camera as Record<string, unknown>).tracked,
         }

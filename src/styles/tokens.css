@@ -260,6 +260,27 @@ a:hover {
   opacity: 0.5;
 }
 
+/* A name edited in place: plain text until hovered or focused. */
+.name-field {
+  min-width: 0;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.name-field:hover {
+  border-color: var(--color-neutral-700);
+}
+.name-field:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-neutral-900);
+}
+
 .field {
   display: flex;
   flex-direction: column;

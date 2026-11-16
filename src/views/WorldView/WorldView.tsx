@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
 
 import { BackIcon } from '@/components/icons'
+import { NameField } from '@/components/NameField'
 import { useShortcuts } from '@/hooks/useShortcuts'
+import { stageName } from '@/lib/cameras'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import { TimelineDock } from '@/views/TimelineView/TimelineDock'
@@ -20,6 +22,7 @@ export function WorldView({ stageId }: { stageId: string }) {
   const node = project?.board.nodes.find((n) => n.id === stageId)
   const wmode = useStore((s) => s.wmode)
   const backToBoard = useStore((s) => s.backToBoard)
+  const renameNode = useStore((s) => s.renameNode)
 
   const onSession = useCallback((s: WorldSession | null) => setSession(s), [])
   useShortcuts(session)
@@ -52,10 +55,24 @@ export function WorldView({ stageId }: { stageId: string }) {
             <BackIcon size={15} /> Back to board
           </button>
           <div
-            className="text-muted"
-            style={{ flex: 'none', fontSize: 11, marginTop: 'calc(-1 * var(--space-2))' }}
+            style={{
+              flex: 'none',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 6,
+              fontSize: 11,
+              marginTop: 'calc(-1 * var(--space-2))',
+            }}
           >
-            {project.name} / {node.label ?? node.kind}
+            <span className="text-muted" style={{ flex: 'none' }}>
+              {project.name} /
+            </span>
+            <NameField
+              label={node.kind === 'animation' ? 'Animation name' : 'Assembly name'}
+              value={stageName(node)}
+              onRename={(name) => renameNode(stageId, name)}
+              style={{ flex: 1, fontSize: 12 }}
+            />
           </div>
 
           {wmode === 'animate' && (
