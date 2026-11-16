@@ -1,4 +1,5 @@
 import { MESH_H, MESH_W, NODE_W, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '@/lib/constants'
+import { duplicateNode } from '@/lib/duplicate'
 import { edgeFor, keyRefersTo } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import { clamp, uid } from '@/lib/utils'
@@ -146,6 +147,14 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     hoverNode(nodeId) {
       set((state) => {
         state.hover = nodeId
+      })
+    },
+    duplicateNode(nodeId) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        if (!project) return
+        const id = duplicateNode(project, nodeId)
+        if (id) state.selId = id
       })
     },
     deleteNode(nodeId) {

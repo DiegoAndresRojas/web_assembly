@@ -20,6 +20,7 @@ export interface BoardNodeProps {
   onPointerLeave: () => void
   onDoubleClick: () => void
   onDelete: (e: PointerEvent) => void
+  onDuplicate: (e: PointerEvent) => void
   onColor: (e: PointerEvent) => void
   onScale: (e: PointerEvent) => void
   onLinkStart: (e: PointerEvent) => void
@@ -36,6 +37,7 @@ export function BoardNode({
   onPointerLeave,
   onDoubleClick,
   onDelete,
+  onDuplicate,
   onColor,
   onScale,
   onLinkStart,
@@ -91,6 +93,9 @@ export function BoardNode({
               </button>
             </>
           )}
+          <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onDuplicate}>
+            Duplicate
+          </button>
           <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onDelete}>
             Delete
           </button>

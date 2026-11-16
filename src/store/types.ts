@@ -118,6 +118,8 @@ export interface BoardActions {
   linkIfDropped: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
   hoverNode: (nodeId: string | null) => void
+  /** Adds an independent copy of a node next to it and selects the copy. */
+  duplicateNode: (nodeId: string) => void
   deleteNode: (nodeId: string) => void
   startLinking: (nodeId: string, x: number, y: number) => void
   updateLinking: (x: number, y: number) => void
