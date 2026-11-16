@@ -18,11 +18,13 @@ import { recordCameraFromView } from '@/hooks/useShortcuts'
 import { cameraSources } from '@/lib/cameras'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { assemblyParts, lockedKey, membersOf, type AssemblyPart } from '@/lib/graph'
+import { isLightKey } from '@/lib/lights'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import type { PartLook, Project, Stage } from '@/types/project'
 import { ImportCameraDialog } from './ImportCameraDialog'
 import { ImportPosesDialog } from './ImportPosesDialog'
+import { LightsPanel } from './LightsPanel'
 import { MemberRow } from './MemberRow'
 
 export interface AnimatePanelProps {
@@ -371,7 +373,11 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
           <ImportPosesDialog
             project={project}
             stageId={stageId}
-            selectedKey={worldSelId && worldSelId !== ANIM_CAMERA_KEY ? worldSelId : null}
+            selectedKey={
+              worldSelId && worldSelId !== ANIM_CAMERA_KEY && !isLightKey(worldSelId)
+                ? worldSelId
+                : null
+            }
             onClose={() => setImportingPoses(false)}
           />
         )}
@@ -441,6 +447,8 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
           )
         })}
       </div>
+
+      <LightsPanel project={project} stageId={stageId} stage={stage} session={session} />
     </div>
   )
 }

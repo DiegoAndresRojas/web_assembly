@@ -112,6 +112,17 @@ export function ImportIcon(props: IconProps) {
   )
 }
 
+/** A light bulb. */
+export function LightIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2Zm2.3 11.3-.3.2V16h-4v-2.5l-.3-.2a5 5 0 1 1 4.6 0ZM9 20h6v2H9v-2Z"
+    />
+  )
+}
+
 // ---------- assembly locks (24×24 geometry) ----------
 export function LockIcon(props: IconProps) {
   return (

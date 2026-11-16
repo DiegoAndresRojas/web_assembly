@@ -24,6 +24,9 @@ function snapshot(stage: Stage): StageSnapshot {
       camera: stage.camera,
       partOverrides: stage.partOverrides,
       startPoses: stage.startPoses,
+      lights: stage.lights,
+      environment: stage.environment,
+      floor: stage.floor,
     }),
   )
 }
@@ -35,6 +38,9 @@ function restore(stage: Stage, snap: StageSnapshot): void {
   stage.camera = snap.camera
   stage.partOverrides = snap.partOverrides ?? {}
   stage.startPoses = snap.startPoses ?? {}
+  stage.lights = snap.lights ?? []
+  stage.environment = snap.environment ?? null
+  stage.floor = snap.floor ?? null
 }
 
 export function createHistorySlice(set: Set, get: Get): HistoryActions {

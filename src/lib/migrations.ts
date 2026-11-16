@@ -8,7 +8,9 @@ import type {
   BoardEdge,
   BoardNode,
   Ease,
+  EnvironmentPreset,
   KeypointLink,
+  LightKind,
   MeshRecord,
   NodeKind,
   PartLook,
@@ -16,6 +18,9 @@ import type {
   Pose,
   Project,
   Stage,
+  StageEnvironment,
+  StageFloor,
+  StageLight,
   StageMember,
   TimelineAction,
   Track,
@@ -37,9 +42,11 @@ import type {
 // 12: animation cameras have a name.
 // 13: animations hold the start poses of their pieces (startPoses) and
 //     only take inputs — edges coming out of one are dropped.
+// 14: animations have their own lighting (lights, environment, floor);
+//     light tracks, and actions that change a light's intensity.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 13
+export const CURRENT_VERSION = 14
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -146,20 +153,25 @@ export function normalizeAction(raw: unknown): TimelineAction | null {
     ease: EASES.includes(a.ease as Ease) ? (a.ease as Ease) : 'easeInOut',
     start: num(a.start, 0),
     duration: Math.max(0.1, num(a.duration, 1)),
+    toIntensity:
+      typeof a.toIntensity === 'number' && Number.isFinite(a.toIntensity)
+        ? clamp(a.toIntensity, 0, 10)
+        : null,
   }
 }
 
 export function normalizeTrack(raw: unknown): Track | null {
   if (!raw || typeof raw !== 'object') return null
   const t = raw as Record<string, unknown>
-  const targetKind = t.targetKind === 'camera' ? 'camera' : 'mesh'
+  const targetKind =
+    t.targetKind === 'camera' ? 'camera' : t.targetKind === 'light' ? 'light' : 'mesh'
   const actions = Array.isArray(t.actions)
     ? t.actions.map(normalizeAction).filter((a): a is TimelineAction => !!a)
     : []
   return {
     id: typeof t.id === 'string' && t.id ? t.id : uid(),
     targetKind,
-    nodeId: targetKind === 'mesh' && typeof t.nodeId === 'string' ? t.nodeId : null,
+    nodeId: targetKind !== 'camera' && typeof t.nodeId === 'string' ? t.nodeId : null,
     initPose: normalizePose(t.initPose),
     // tracks saved before this existed keep the pose they stored
     initLinked: targetKind === 'mesh' && t.initLinked === true,
@@ -198,6 +210,56 @@ function normalizeStartPoses(raw: unknown): Record<string, Pose> {
   return out
 }
 
+const LIGHT_KINDS: LightKind[] = ['ambient', 'directional', 'point', 'spot']
+const ENVIRONMENTS: EnvironmentPreset[] = ['studio', 'sky', 'sunset']
+
+function asColor(raw: unknown, fallback: string): string {
+  return typeof raw === 'string' && /^#[0-9a-f]{6}$/i.test(raw) ? raw : fallback
+}
+
+export function normalizeLight(raw: unknown): StageLight | null {
+  if (!raw || typeof raw !== 'object') return null
+  const l = raw as Record<string, unknown>
+  const kind = l.kind as LightKind
+  if (!LIGHT_KINDS.includes(kind)) return null
+  return {
+    id: typeof l.id === 'string' && l.id ? l.id : uid(),
+    kind,
+    name: typeof l.name === 'string' && l.name.trim() ? l.name.trim() : 'Light',
+    visible: l.visible !== false,
+    color: asColor(l.color, '#ffffff'),
+    intensity: clamp(num(l.intensity, 1), 0, 10),
+    pose: normalizePose(l.pose),
+    distance: Math.max(0, num(l.distance, 0)),
+    angle: clamp(num(l.angle, 30), 1, 89),
+    penumbra: clamp(num(l.penumbra, 0.4), 0, 1),
+    castShadow: kind !== 'ambient' && l.castShadow === true,
+  }
+}
+
+function normalizeEnvironment(raw: unknown): StageEnvironment | null {
+  if (!raw || typeof raw !== 'object') return null
+  const e = raw as Record<string, unknown>
+  if (!ENVIRONMENTS.includes(e.preset as EnvironmentPreset)) return null
+  return {
+    preset: e.preset as EnvironmentPreset,
+    intensity: clamp(num(e.intensity, 1), 0, 5),
+    rotation: num(e.rotation, 0),
+  }
+}
+
+function normalizeFloor(raw: unknown): StageFloor | null {
+  if (!raw || typeof raw !== 'object') return null
+  const f = raw as Record<string, unknown>
+  return {
+    visible: f.visible !== false,
+    mode: f.mode === 'solid' ? 'solid' : 'shadow',
+    height: num(f.height, 0),
+    color: asColor(f.color, '#ffffff'),
+    shadow: clamp(num(f.shadow, 0.35), 0, 1),
+  }
+}
+
 function cameraName(raw: unknown): string {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : 'Camera'
 }
@@ -216,6 +278,11 @@ export function normalizeStage(raw: unknown): Stage {
           tracked: !!(s.camera as Record<string, unknown>).tracked,
         }
       : null
+  const lights = Array.isArray(s.lights)
+    ? s.lights.map(normalizeLight).filter((l): l is StageLight => !!l)
+    : []
+  // a light track only lives as long as its light
+  const lightKeys = new Set(lights.map((l) => 'light:' + l.id))
   return {
     kind,
     frame: isFrameFormat(s.frame) ? s.frame : DEFAULT_FRAME_FORMAT,
@@ -227,12 +294,18 @@ export function normalizeStage(raw: unknown): Stage {
       : [],
     camera,
     tracks: Array.isArray(s.tracks)
-      ? s.tracks.map(normalizeTrack).filter((t): t is Track => !!t)
+      ? s.tracks
+          .map(normalizeTrack)
+          .filter((t): t is Track => !!t)
+          .filter((t) => t.targetKind !== 'light' || lightKeys.has(t.nodeId ?? ''))
       : [],
     union: s.union && typeof s.union === 'object' ? (s.union as { at: number }) : null,
     partLooks: normalizePartLooks(s.partLooks),
     partOverrides: normalizePartOverrides(s.partOverrides),
     startPoses: normalizeStartPoses(s.startPoses),
+    lights,
+    environment: normalizeEnvironment(s.environment),
+    floor: normalizeFloor(s.floor),
   }
 }
 

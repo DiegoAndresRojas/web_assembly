@@ -9,6 +9,7 @@ import { createAssemblySlice, initialAssemblyState } from './assemblySlice'
 import { createBoardSlice, initialBoardState } from './boardSlice'
 import { createExportSlice, initialExportState } from './exportSlice'
 import { createHistorySlice, initialHistoryState } from './historySlice'
+import { createLightsSlice } from './lightsSlice'
 import { createNavigationSlice, initialNavigationState } from './navigationSlice'
 import { createProjectStorage } from './persistStorage'
 import { createProjectsSlice, initialProjectsState } from './projectsSlice'
@@ -34,6 +35,7 @@ export const useStore = create<AppState>()(
       ...createHistorySlice(set, get),
       ...createAssemblySlice(set, get),
       ...createAnimationSlice(set, get),
+      ...createLightsSlice(set, get),
       ...createExportSlice(set),
     })),
     {

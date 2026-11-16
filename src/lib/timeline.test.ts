@@ -18,6 +18,7 @@ const action = (over: Partial<TimelineAction>): TimelineAction => ({
   ease: 'linear',
   start: 0,
   duration: 1,
+  toIntensity: null,
   ...over,
 })
 

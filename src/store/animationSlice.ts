@@ -6,6 +6,7 @@ import { cameraSources, DEFAULT_CAMERA_NAME } from '@/lib/cameras'
 import { effectiveTrack, holdStartPoses, importedPoses, recoverFromChain } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { inputLabel, PART_SEP, partForKey, restPoseOf } from '@/lib/graph'
+import { INTENSITY_MAX, isLightKey, lightForKey, lightIdOf } from '@/lib/lights'
 import { normalizeAction, normalizeTrack } from '@/lib/migrations'
 import {
   MIN_ACTION_S,
@@ -106,6 +107,12 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
     },
 
     addMeshTrack(nodeId) {
+      // (a light's track is its own thing: it has no piece behind it)
+      const lightId = lightIdOf(nodeId)
+      if (lightId) {
+        get().addLightTrack(lightId)
+        return
+      }
       const found = get().projects.find((p) => p.id === get().pid)?.stages[get().aid ?? '']
       if (!found || found.tracks.some((t) => t.nodeId === nodeId)) return
       pushHistory()
@@ -236,7 +243,11 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
             kind: 'track',
             id: trackId,
             label:
-              track.targetKind === 'camera' ? 'Camera' : inputLabel(project ?? null, track.nodeId),
+              track.targetKind === 'camera'
+                ? 'Camera'
+                : isLightKey(track.nodeId)
+                  ? (lightForKey(project?.stages[aid ?? ''], track.nodeId)?.name ?? 'Light')
+                  : inputLabel(project ?? null, track.nodeId),
           }
         })
         return
@@ -365,16 +376,24 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         if (patch.toLinked !== undefined) action.toLinked = patch.toLinked
         if (patch.fromPose) action.fromPose = clonePose(patch.fromPose)
         if (patch.toPose) action.toPose = clonePose(patch.toPose)
+        if (patch.toIntensity !== undefined) {
+          action.toIntensity =
+            patch.toIntensity === null ? null : clamp(patch.toIntensity, 0, INTENSITY_MAX)
+        }
       })
     },
 
     setInitPose(trackId, pose) {
       set((state) => {
-        const track = openStage(state)?.stage.tracks.find((x) => x.id === trackId)
+        const stage = openStage(state)?.stage
+        const track = stage?.tracks.find((x) => x.id === trackId)
         if (!track) return
         // a pose chosen by hand: the track no longer follows the piece
         track.initPose = clonePose(pose)
         track.initLinked = false
+        // a light is where its track starts
+        const light = track.targetKind === 'light' ? lightForKey(stage, track.nodeId) : undefined
+        if (light) light.pose = clonePose(pose)
       })
     },
     setInitLinked(trackId, linked) {

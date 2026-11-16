@@ -10,10 +10,20 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 import { applyPose, readPose } from './buildMesh'
 import { ANIM_ASPECT, AnimCameraRig } from './animCameraRig'
+import { buildEnvironment } from './environments'
+import { LightRig } from './lightRig'
 import { snapIntersection, type SnapMode } from './surfaceSnap'
 import { ANIM_CAMERA_KEY, KP_POINT_COLOR } from '@/lib/constants'
 import { frameAt } from '@/lib/keypoints'
-import type { Pose, Vec3 } from '@/types/project'
+import { isLightKey, lightIdOf, lightKey, type LightFrame, type SceneBounds } from '@/lib/lights'
+import type {
+  EnvironmentPreset,
+  Pose,
+  StageEnvironment,
+  StageFloor,
+  StageLight,
+  Vec3,
+} from '@/types/project'
 
 const CLICK_SLOP = 6
 /** Keypoint axis arrows, in marker radii; colors match the X/Y/Z inputs. */
@@ -90,6 +100,17 @@ export class WorldSession {
   private clearAlpha = 1
   private grid: THREE.GridHelper | null = null
   private gizmoHelper: THREE.Object3D | null = null
+  /** What lights a stage with no lights of its own. */
+  private defaultLights: THREE.Light[] = []
+  /** The stage's own lights, by light id. */
+  private lightRigs = new Map<string, LightRig>()
+  /** Size of the lights' bodies, fitted to the pieces like the camera's. */
+  private lightSize = 0.3
+  private environments = new Map<EnvironmentPreset, THREE.Texture>()
+  private floor: THREE.Mesh | null = null
+  private floorMode: StageFloor['mode'] | null = null
+  /** Where the pieces are right now (see measure()). */
+  private bounds = { center: new THREE.Vector3(), radius: 2, minY: 0 }
   private raycaster = new THREE.Raycaster()
   private ndc = new THREE.Vector2()
 
@@ -125,13 +146,16 @@ export class WorldSession {
       alpha: true,
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    // (costs nothing until a light is told to cast shadows)
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     container.appendChild(renderer.domElement)
     this.renderer = renderer
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1a22, 1.1))
     const dir = new THREE.DirectionalLight(0xffffff, 1.4)
     dir.position.set(4, 6, 4)
-    scene.add(dir)
+    this.defaultLights = [new THREE.HemisphereLight(0xffffff, 0x1a1a22, 1.1), dir]
+    scene.add(...this.defaultLights)
     this.grid = new THREE.GridHelper(20, 20, 0x3a3752, 0x24223a)
     scene.add(this.grid)
 
@@ -189,6 +213,7 @@ export class WorldSession {
       if (!this.cameraDriven) controls.update()
       opts.onFrame?.(dt)
       this.updateHover()
+      this.updateLighting()
       if (this.viewingThrough()) this.renderFramed(rig.camera)
       else renderer.render(scene, camera)
     }
@@ -222,6 +247,16 @@ export class WorldSession {
         .intersectObject(rig.visual, true)
         .find((h) => h.object.userData.msAnimCamera)
       if (hit && (!best || hit.distance < best.hit.distance)) best = { id: ANIM_CAMERA_KEY, hit }
+    }
+    // and so are the bodies of the lights
+    if (this.keypointMode === null && !this.lightsHidden()) {
+      for (const [id, light] of this.lightRigs) {
+        if (!light.posed) continue
+        const hit = this.raycaster
+          .intersectObject(light.visual, true)
+          .find((h) => h.object.userData.msLight)
+        if (hit && (!best || hit.distance < best.hit.distance)) best = { id: lightKey(id), hit }
+      }
     }
     return best
   }
@@ -462,6 +497,12 @@ export class WorldSession {
 
   addObject(id: string, object3d: THREE.Object3D): void {
     if (!this.scene) return
+    object3d.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
     this.objects.set(id, object3d)
     this.scene.add(object3d)
     this.hoverDirty = true
@@ -481,6 +522,10 @@ export class WorldSession {
    *  names a child built by lib/three/stageInput.ts. */
   getObject(id: string): THREE.Object3D | null {
     if (id === ANIM_CAMERA_KEY) return this.animRig?.root.visible ? this.animRig.root : null
+    if (isLightKey(id)) {
+      const light = this.lightRigs.get(lightIdOf(id) ?? '')
+      return light?.posed ? light.root : null
+    }
     const direct = this.objects.get(id)
     if (direct) return direct
     const [top, ...rest] = id.split('/')
@@ -683,6 +728,7 @@ export class WorldSession {
     // read clearly next to the pieces
     this.animRig?.setClip(this.camera.near, this.camera.far)
     this.animRig?.setSize(radius * 0.16)
+    this.lightSize = radius * 0.13
     const dist = Math.max(radius * 2.4, this.camera.near * 4)
     this.camera.position.set(
       sphere.center.x + dist * 0.6,
@@ -746,7 +792,147 @@ export class WorldSession {
     return this.lookThrough && !!this.animRig?.root.visible
   }
 
+  // ---------- lighting ----------
+
+  /** Lights the world with the stage's own lights — or, given none, with
+   *  the default lighting. Where they are and how bright is set per frame
+   *  (poseLights). */
+  setLights(lights: StageLight[]): void {
+    const scene = this.scene
+    if (!scene) return
+    for (const light of this.defaultLights) light.visible = lights.length === 0
+    let changed = false
+    for (const [id, rig] of this.lightRigs) {
+      const spec = lights.find((l) => l.id === id)
+      if (spec && spec.kind === rig.kind) continue
+      if (this.selectedId === lightKey(id)) this.gizmo?.detach()
+      scene.remove(rig.root)
+      rig.dispose()
+      this.lightRigs.delete(id)
+      changed = true
+    }
+    for (const spec of lights) {
+      let rig = this.lightRigs.get(spec.id)
+      if (!rig) {
+        rig = new LightRig(spec.kind)
+        rig.setSize(this.lightSize)
+        applyPose(rig.root, spec.pose)
+        rig.setIntensity(spec.intensity)
+        this.lightRigs.set(spec.id, rig)
+        scene.add(rig.root)
+        changed = true
+      }
+      rig.update(spec)
+    }
+    // a selected light may only now have a body to hold on to
+    if (changed && isLightKey(this.selectedId)) this.setSelected(this.selectedId)
+  }
+
+  poseLights(frames: LightFrame[]): void {
+    for (const frame of frames) {
+      const rig = this.lightRigs.get(frame.id)
+      if (!rig) continue
+      applyPose(rig.root, frame.pose)
+      rig.setIntensity(frame.intensity)
+    }
+  }
+
+  setEnvironment(env: StageEnvironment | null): void {
+    const { scene, renderer } = this
+    if (!scene || !renderer) return
+    if (!env) {
+      scene.environment = null
+      return
+    }
+    let texture = this.environments.get(env.preset)
+    if (!texture) {
+      texture = buildEnvironment(renderer, env.preset)
+      this.environments.set(env.preset, texture)
+    }
+    scene.environment = texture
+    scene.environmentIntensity = env.intensity
+    scene.environmentRotation.set(0, THREE.MathUtils.degToRad(env.rotation), 0)
+  }
+
+  setFloor(floor: StageFloor | null): void {
+    const scene = this.scene
+    if (!scene) return
+    if (this.floor && (!floor || floor.mode !== this.floorMode)) {
+      scene.remove(this.floor)
+      this.floor.geometry.dispose()
+      ;(this.floor.material as THREE.Material).dispose()
+      this.floor = null
+    }
+    if (!floor) return
+    if (!this.floor) {
+      const material =
+        floor.mode === 'shadow'
+          ? new THREE.ShadowMaterial({ transparent: true })
+          : new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0 })
+      this.floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material)
+      this.floor.rotation.x = -Math.PI / 2
+      this.floor.receiveShadow = true
+      this.floorMode = floor.mode
+      scene.add(this.floor)
+    }
+    const material = this.floor.material
+    if (material instanceof THREE.ShadowMaterial) material.opacity = floor.shadow
+    else if (material instanceof THREE.MeshStandardMaterial) material.color.set(floor.color)
+    this.floor.visible = floor.visible
+    this.floor.position.y = floor.height
+  }
+
+  /** Where the pieces are right now: the sphere around them and their
+   *  lowest point. */
+  private measure(): void {
+    const box = new THREE.Box3()
+    this.objects.forEach((obj) => {
+      if (obj.visible) box.expandByObject(obj)
+    })
+    if (box.isEmpty()) return
+    const sphere = box.getBoundingSphere(new THREE.Sphere())
+    this.bounds.center.copy(sphere.center)
+    this.bounds.radius = Math.max(sphere.radius, 1e-4)
+    this.bounds.minY = box.min.y
+  }
+
+  sceneBounds(): SceneBounds {
+    this.measure()
+    const { center, radius, minY } = this.bounds
+    return { center: { x: center.x, y: center.y, z: center.z }, radius, minY }
+  }
+
+  /** The lights' bodies are for working on the scene, never part of a
+   *  shot: hidden while looking through the animation camera or exporting. */
+  private lightsHidden(): boolean {
+    return this.viewingThrough() || !!this.exportSize
+  }
+
+  /** Per frame: light bodies shown or not, shadows and the floor fitted to
+   *  wherever the pieces are now. */
+  private updateLighting(): void {
+    const hidden = this.lightsHidden()
+    let shadows = false
+    for (const rig of this.lightRigs.values()) {
+      rig.visual.visible = !hidden
+      rig.setSize(this.lightSize)
+      if (rig.castsShadow) shadows = true
+    }
+    if (!shadows && !this.floor) return
+    this.measure()
+    const { center, radius } = this.bounds
+    for (const rig of this.lightRigs.values()) {
+      if (rig.castsShadow) rig.fitShadow(center, radius)
+    }
+    if (this.floor) {
+      this.floor.position.x = center.x
+      this.floor.position.z = center.z
+      this.floor.scale.setScalar(radius * 80)
+    }
+  }
+
   render(): void {
+    this.updateLighting()
     if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera)
   }
 
@@ -757,6 +943,7 @@ export class WorldSession {
     if (!rig?.root.visible || !this.renderer || !this.scene) return false
     const shown = rig.visual.visible
     rig.visual.visible = false
+    this.updateLighting()
     this.renderFramed(rig.camera)
     rig.visual.visible = shown
     return true
@@ -867,6 +1054,12 @@ export class WorldSession {
     this.controls?.dispose()
     this.gizmo?.dispose()
     this.animRig?.dispose()
+    for (const rig of this.lightRigs.values()) rig.dispose()
+    for (const texture of this.environments.values()) texture.dispose()
+    if (this.floor) {
+      this.floor.geometry.dispose()
+      ;(this.floor.material as THREE.Material).dispose()
+    }
     if (this.renderer) {
       this.renderer.dispose()
       const el = this.renderer.domElement

@@ -5,6 +5,7 @@ import { CloseIcon, DuplicateIcon, TrashIcon } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
 import { effectiveTrack } from '@/lib/chain'
 import { inputLabel, restPoseOf } from '@/lib/graph'
+import { intensityAtTime, isPosed, lightForKey } from '@/lib/lights'
 import { readPose } from '@/lib/three/buildMesh'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { clampActionMove, clampActionResize, resolveActions } from '@/lib/timeline'
@@ -97,12 +98,18 @@ export function ActionInspector({
   const setInitLinked = useStore((s) => s.setInitLinked)
   const duplicateAction = useStore((s) => s.duplicateAction)
   const deleteAction = useStore((s) => s.deleteAction)
+  const updateLight = useStore((s) => s.updateLight)
 
   const track = selection ? stage.tracks.find((t) => t.id === selection.trackId) : undefined
   if (!selection || !track) return null
 
   const isCam = track.targetKind === 'camera'
   const key = track.nodeId
+  // a light's track moves the light and can change how bright it is; an
+  // ambient light has no place, so only its intensity is animated
+  const light = track.targetKind === 'light' ? lightForKey(stage, key) : undefined
+  const isLight = track.targetKind === 'light'
+  const hasPose = !light || isPosed(light.kind)
   const rest = key ? restPoseOf(project, stageId, key) : null
   // the track as it plays: a followed start resolved to an actual pose
   const playing = effectiveTrack(project, stageId, track)
@@ -129,7 +136,9 @@ export function ActionInspector({
         title={
           isCam
             ? "Take the camera object's pose (move it with the gizmo first)"
-            : 'Take the pose the piece has in the viewport (move it with the gizmo first)'
+            : isLight
+              ? 'Take where the light is in the viewport (move it with the gizmo first)'
+              : 'Take the pose the piece has in the viewport (move it with the gizmo first)'
         }
         onClick={() => take('object', apply)}
       >
@@ -160,7 +169,11 @@ export function ActionInspector({
             textOverflow: 'ellipsis',
           }}
         >
-          {isCam ? (stage.camera?.name ?? 'Camera') : inputLabel(project, key)}
+          {isCam
+            ? (stage.camera?.name ?? 'Camera')
+            : isLight
+              ? (light?.name ?? 'Light')
+              : inputLabel(project, key)}
         </div>
         <div className="text-muted" style={{ fontSize: 10 }}>
           {subtitle}
@@ -175,27 +188,39 @@ export function ActionInspector({
   if (selection.actionId === 'init') {
     return (
       <div className="tl-inspector">
-        {header('Initial pose — where the track starts')}
-        <Section
-          title="Pose"
-          aside={
-            isCam ? undefined : (
-              <Check
-                checked={track.initLinked}
-                label="Where the piece is"
-                title="Start where the piece is when this animation begins: where its assembly put it, or the position imported for it (Import positions)"
-                onChange={(v) => {
-                  beginEdit()
-                  setInitLinked(track.id, v)
-                }}
-              />
-            )
-          }
-        >
-          {/* editing a followed pose by hand stops following it */}
-          <PoseFields pose={playing.initPose} onChange={(p) => setInitPose(track.id, p)} />
-          {poseButtons((p) => setInitPose(track.id, p))}
-        </Section>
+        {header(isLight ? 'How the light starts' : 'Initial pose — where the track starts')}
+        {light && (
+          <Section title="Intensity">
+            <NumberField
+              value={light.intensity}
+              step={0.1}
+              width={70}
+              onChange={(intensity) => updateLight(light.id, { intensity })}
+            />
+          </Section>
+        )}
+        {hasPose && (
+          <Section
+            title="Pose"
+            aside={
+              isCam || isLight ? undefined : (
+                <Check
+                  checked={track.initLinked}
+                  label="Where the piece is"
+                  title="Start where the piece is when this animation begins: where its assembly put it, or the position imported for it (Import positions)"
+                  onChange={(v) => {
+                    beginEdit()
+                    setInitLinked(track.id, v)
+                  }}
+                />
+              )
+            }
+          >
+            {/* editing a followed pose by hand stops following it */}
+            <PoseFields pose={playing.initPose} onChange={(p) => setInitPose(track.id, p)} />
+            {poseButtons((p) => setInitPose(track.id, p))}
+          </Section>
+        )}
       </div>
     )
   }
@@ -252,48 +277,89 @@ export function ActionInspector({
         </label>
       </Section>
 
-      <Section
-        title="Start pose"
-        aside={
-          <Check
-            checked={action.fromLinked}
-            label="Continue from previous"
-            title="Start wherever the track is when this action begins"
-            onChange={(v) => {
-              beginEdit()
-              patch({ fromLinked: v })
-            }}
-          />
-        }
-      >
-        <PoseFields
-          pose={from}
-          disabled={action.fromLinked}
-          onChange={(p) => patch({ fromPose: p })}
-        />
-        {!action.fromLinked && poseButtons((p) => patch({ fromPose: p }))}
-      </Section>
-
-      <Section
-        title="End pose"
-        aside={
-          !isCam && (
+      {light && (
+        <Section
+          title="Intensity at the end"
+          aside={
             <Check
-              checked={action.toLinked}
-              disabled={!rest}
-              label="To connector"
-              title="End where the assembly's connectors put the piece"
+              checked={action.toIntensity !== null}
+              label="Change it"
+              title="Fade the light to another intensity over this action"
               onChange={(v) => {
                 beginEdit()
-                patch({ toLinked: v })
+                patch({
+                  toIntensity: v
+                    ? intensityAtTime(track, light.intensity, action.start + action.duration)
+                    : null,
+                })
               }}
             />
-          )
-        }
-      >
-        <PoseFields pose={to} disabled={action.toLinked} onChange={(p) => patch({ toPose: p })} />
-        {!action.toLinked && poseButtons((p) => patch({ toPose: p }))}
-      </Section>
+          }
+        >
+          <NumberField
+            value={
+              action.toIntensity ??
+              intensityAtTime(track, light.intensity, action.start + action.duration)
+            }
+            step={0.1}
+            width={70}
+            disabled={action.toIntensity === null}
+            onChange={(v) => patch({ toIntensity: v })}
+          />
+        </Section>
+      )}
+
+      {hasPose && (
+        <>
+          <Section
+            title="Start pose"
+            aside={
+              <Check
+                checked={action.fromLinked}
+                label="Continue from previous"
+                title="Start wherever the track is when this action begins"
+                onChange={(v) => {
+                  beginEdit()
+                  patch({ fromLinked: v })
+                }}
+              />
+            }
+          >
+            <PoseFields
+              pose={from}
+              disabled={action.fromLinked}
+              onChange={(p) => patch({ fromPose: p })}
+            />
+            {!action.fromLinked && poseButtons((p) => patch({ fromPose: p }))}
+          </Section>
+
+          <Section
+            title="End pose"
+            aside={
+              !isCam &&
+              !isLight && (
+                <Check
+                  checked={action.toLinked}
+                  disabled={!rest}
+                  label="To connector"
+                  title="End where the assembly's connectors put the piece"
+                  onChange={(v) => {
+                    beginEdit()
+                    patch({ toLinked: v })
+                  }}
+                />
+              )
+            }
+          >
+            <PoseFields
+              pose={to}
+              disabled={action.toLinked}
+              onChange={(p) => patch({ toPose: p })}
+            />
+            {!action.toLinked && poseButtons((p) => patch({ toPose: p }))}
+          </Section>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 6, marginTop: 'auto' }}>
         <Button

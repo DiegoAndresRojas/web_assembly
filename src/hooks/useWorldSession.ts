@@ -23,6 +23,7 @@ import {
   PART_SEP,
   partLocalPose,
 } from '@/lib/graph'
+import { lightIdOf, lightsAt, lightTrack } from '@/lib/lights'
 import { stageDuration } from '@/lib/timeline'
 import { aspectOf } from '@/lib/videoFormat'
 import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
@@ -56,10 +57,17 @@ function onPick(hit: PickHit | null): void {
 
 /** Gizmo drags only move the live object. Assembly writes the result back
  *  to the stage member (keypoint links solve against it). In animate mode
- *  a move is a preview until recorded into an action (recordPose). */
+ *  a move is a preview until recorded into an action (recordPose) — except
+ *  for a light that is not on the timeline: it simply is where it is put. */
 function onObjectMoved(nodeId: string, pose: Pose): void {
   const state = useStore.getState()
-  if (state.wmode === 'assembly') state.setMemberPose(nodeId, pose)
+  if (state.wmode === 'assembly') {
+    state.setMemberPose(nodeId, pose)
+    return
+  }
+  const lightId = lightIdOf(nodeId)
+  const stage = selectCurrentProject(state)?.stages[state.aid ?? '']
+  if (lightId && !lightTrack(stage, lightId)) state.setLightPose(lightId, pose)
 }
 
 /** Poses every piece of `stageId` for time `t`: tracked pieces where their
@@ -72,7 +80,9 @@ export function applyStageAt(
   stageId: string,
   t: number,
 ): Pose | null {
-  if (!project.stages[stageId]) return null
+  const stage = project.stages[stageId]
+  if (!stage) return null
+  session.poseLights(lightsAt(stage, t))
   const evald = evalStageIn(project, stageId, t)
   for (const { key, start } of stagePieces(project, stageId)) {
     const obj = session.getObject(key)
@@ -266,6 +276,11 @@ function syncSession(session: WorldSession, stageId: string): void {
   }
   // pieces inside assembly inputs: visibility / opacity per piece
   applyPartLooks(session, project, stageId)
+  // an animation's own lighting (an assembly is always lit the default way)
+  const lit = kind === 'animation' ? project.stages[stageId] : undefined
+  session.setLights(lit?.lights ?? [])
+  session.setEnvironment(lit?.environment ?? null)
+  session.setFloor(lit?.floor ?? null)
   // members sit at their connector pose now; an animation shows the
   // playhead's frame instead (unless playback is already driving it)
   if (kind === 'animation' && !state.playing) showAnimateFrame(session, state.playT)

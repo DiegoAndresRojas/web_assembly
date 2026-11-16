@@ -5,6 +5,7 @@ import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
 
 import { recoverFromChain } from '@/lib/chain'
+import { recoverLightsFromChain } from '@/lib/lights'
 import { clamp, uid } from '@/lib/utils'
 import { ensureStage, findProject } from './helpers'
 import type { BoardActions, BoardState, Get, Set } from './types'
@@ -33,6 +34,9 @@ function takeChainStartPoses(project: Draft<Project>, fromId: string, toId: stri
   if (kindOf(fromId) !== 'assembly' || kindOf(toId) !== 'animation') return
   ensureStage(project, toId, 'animation')
   recoverFromChain(project, toId, fromId)
+  // …and it is lit the way the animation before it was (unless it already
+  // has lighting of its own)
+  recoverLightsFromChain(project, toId)
 }
 
 function nodeBox(kind: NodeKind, x: number, y: number) {

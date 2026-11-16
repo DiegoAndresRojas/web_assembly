@@ -133,7 +133,9 @@ export function evalStage(
   let camera: Pose | null = null
   for (const track of stage.tracks) {
     if (track.targetKind === 'camera') camera = poseAtTime(track, t)
-    else if (track.nodeId) meshes[track.nodeId] = poseAtTime(track, t, restPoseOf(track.nodeId))
+    else if (track.targetKind === 'mesh' && track.nodeId) {
+      meshes[track.nodeId] = poseAtTime(track, t, restPoseOf(track.nodeId))
+    }
   }
   return { meshes, camera }
 }

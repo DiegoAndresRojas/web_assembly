@@ -4,17 +4,22 @@
 // see store/index.ts.
 import type { Draft } from 'immer'
 
+import type { LightPreset, SceneBounds } from '@/lib/lights'
 import type { SnapMode } from '@/lib/three/surfaceSnap'
 import type { VideoBackground } from '@/lib/videoFormat'
 import type {
   Axis,
   FrameFormat,
   KeypointLink,
+  LightKind,
   PartOverride,
   PickHit,
   Pose,
   Project,
   StageCamera,
+  StageEnvironment,
+  StageFloor,
+  StageLight,
   StageMember,
   TimelineAction,
   Track,
@@ -192,6 +197,9 @@ export interface StageSnapshot {
   camera: StageCamera | null
   partOverrides: Record<string, PartOverride>
   startPoses: Record<string, Pose>
+  lights: StageLight[]
+  environment: StageEnvironment | null
+  floor: StageFloor | null
 }
 
 export interface HistoryState {
@@ -256,7 +264,17 @@ export interface TimelineSelection {
 }
 
 export type ActionPatch = Partial<
-  Pick<TimelineAction, 'start' | 'duration' | 'ease' | 'fromLinked' | 'toLinked' | 'fromPose' | 'toPose'>
+  Pick<
+    TimelineAction,
+    | 'start'
+    | 'duration'
+    | 'ease'
+    | 'fromLinked'
+    | 'toLinked'
+    | 'fromPose'
+    | 'toPose'
+    | 'toIntensity'
+  >
 >
 
 export interface AnimationState {
@@ -322,6 +340,35 @@ export interface AnimationActions {
   recordPose: (key: string, pose: Pose) => void
 }
 
+// ---------- lighting (of the open animation stage) ----------
+export type LightPatch = Partial<Omit<StageLight, 'id' | 'kind'>>
+
+export interface LightsActions {
+  /** Adds a light around the pieces (`bounds`: where they are), aimed at
+   *  them, and selects it. A stage's first light comes with an ambient fill. */
+  addLight: (kind: LightKind, bounds: SceneBounds) => void
+  /** Replaces the stage's lights with a ready-made set around the pieces. */
+  applyLightPreset: (preset: LightPreset, bounds: SceneBounds) => void
+  /** Removes every light: back to the default lighting. */
+  clearLights: () => void
+  /** Live edit — call beginEdit() once before a gesture. */
+  updateLight: (id: string, patch: LightPatch) => void
+  /** Moves a light, as one undoable step (a gizmo drag). */
+  setLightPose: (id: string, pose: Pose) => void
+  /** Turns a light, where it is, to shine at `target`. */
+  aimLight: (id: string, target: Vec3) => void
+  duplicateLight: (id: string) => void
+  removeLight: (id: string) => void
+  /** Puts a light on the timeline, to move it or change its intensity. */
+  addLightTrack: (id: string) => void
+  /** Takes the lighting of an animation earlier in the chain, as that one
+   *  ends: in place of this stage's own, or added to it. */
+  importLights: (fromStageId: string, mode: 'replace' | 'add') => void
+  /** Live edits — call beginEdit() once before a gesture. Null removes it. */
+  setEnvironment: (environment: StageEnvironment | null) => void
+  setFloor: (floor: StageFloor | null) => void
+}
+
 // ---------- export dialogs (execution lives in hooks, not the store) ----------
 export interface ExportState {
   dlAsk: boolean
@@ -366,5 +413,6 @@ export type AppState = ProjectsState &
   AssemblyActions &
   AnimationState &
   AnimationActions &
+  LightsActions &
   ExportState &
   ExportActions

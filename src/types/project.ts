@@ -91,13 +91,18 @@ export interface TimelineAction {
   ease: Ease
   start: number
   duration: number
+  /** Light tracks: the intensity the light reaches by the end of the
+   *  action (null: the action leaves it as it is). */
+  toIntensity: number | null
 }
 
-export type TrackTargetKind = 'mesh' | 'camera'
+export type TrackTargetKind = 'mesh' | 'camera' | 'light'
 
 export interface Track {
   id: string
   targetKind: TrackTargetKind
+  /** The piece's node id / part key; a light's key (`light:<id>`); null
+   *  for the camera. */
   nodeId: string | null
   initPose: Pose
   /** Start where the piece already is — where its assembly put it, or
@@ -113,6 +118,54 @@ export interface StageCamera {
   name: string
   pose: Pose
   tracked: boolean
+}
+
+export type LightKind = 'ambient' | 'directional' | 'point' | 'spot'
+
+/** A light of an animation stage: an object in its world, like the camera.
+ *  It shines down its own -Z (position and rotation in `pose`); an ambient
+ *  light has no place or direction and ignores it. */
+export interface StageLight {
+  id: string
+  kind: LightKind
+  name: string
+  /** Switched on. */
+  visible: boolean
+  color: string
+  /** 1 is roughly "a normal light"; the same scale for every kind. */
+  intensity: number
+  pose: Pose
+  /** Point / spot: how far it reaches, in world units (0 = no limit). */
+  distance: number
+  /** Spot: half the cone's opening, in degrees. */
+  angle: number
+  /** Spot: how soft the cone's edge is, 0 (hard) to 1. */
+  penumbra: number
+  castShadow: boolean
+}
+
+export type EnvironmentPreset = 'studio' | 'sky' | 'sunset'
+
+/** Soft light and reflections from all around, from a built-in backdrop
+ *  (never visible itself). */
+export interface StageEnvironment {
+  preset: EnvironmentPreset
+  intensity: number
+  /** Turned around the vertical axis, in degrees. */
+  rotation: number
+}
+
+/** An optional ground under the pieces: only the shadows that fall on it
+ *  ('shadow'), or a solid surface. */
+export interface StageFloor {
+  visible: boolean
+  mode: 'shadow' | 'solid'
+  /** World Y it lies at. */
+  height: number
+  /** 'solid': its color. */
+  color: string
+  /** 'shadow': how dark the shadows on it are, 0 to 1. */
+  shadow: number
 }
 
 export interface StageUnion {
@@ -142,6 +195,11 @@ export interface Stage {
   /** Pieces of this stage's assembly inputs that were unlocked from them,
    *  by part key (`asmNodeId/pieceNodeId`). */
   partOverrides: Record<string, PartOverride>
+  /** Animation stages: their own lighting. With no lights of its own a
+   *  stage is lit by the default lighting. */
+  lights: StageLight[]
+  environment: StageEnvironment | null
+  floor: StageFloor | null
 }
 
 /** A piece of an assembly input taken out of the pose it was assembled in.

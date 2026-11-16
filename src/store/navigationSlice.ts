@@ -2,6 +2,7 @@ import type { Draft } from 'immer'
 
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { PART_SEP } from '@/lib/graph'
+import { isLightKey, lightForKey } from '@/lib/lights'
 import type { AppState, Get, NavigationActions, NavigationState, Set, StageView } from './types'
 import type { Stage, WorldMode } from '@/types/project'
 
@@ -39,6 +40,7 @@ export function validStageView(view: StageView | undefined, stage: Stage | undef
   const isInput = (key: string) => {
     const top = key.split(PART_SEP)[0]
     if (top === ANIM_CAMERA_KEY) return !!stage.camera
+    if (isLightKey(top)) return !!lightForKey(stage, top)
     return stage.members.some((m) => m.nodeId === top)
   }
   const sel = view.selection

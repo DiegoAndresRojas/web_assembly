@@ -85,7 +85,8 @@ export function evalStageIn(project: Project, stageId: string, t: number): Stage
   let camera: Pose | null = null
   for (const track of stage?.tracks ?? []) {
     if (track.targetKind === 'camera') camera = poseAtTime(track, t)
-    else if (track.nodeId) {
+    // (lights are evaluated on their own: lib/lights.ts)
+    else if (track.targetKind === 'mesh' && track.nodeId) {
       meshes[track.nodeId] = poseAtTime(
         effectiveTrack(project, stageId, track),
         t,
@@ -268,16 +269,17 @@ function saysSomething(project: Project, stageId: string): boolean {
   )
 }
 
-/** The last animation before `stageId` in its chain of assemblies: the
- *  animation of the nearest assembly feeding the ones this animation
- *  plays that says anything — its own assembly's inputs first, then
- *  theirs, and so on back. Null at the start of a chain. */
-export function previousAnimation(project: Project, stageId: string): string | null {
+/** The animations before `stageId` in its chain of assemblies, nearest
+ *  first: those of the assemblies feeding the ones this animation plays —
+ *  its own assemblies' inputs first, then theirs, and so on back. */
+export function earlierAnimations(project: Project, stageId: string): string[] {
+  const kindOf = (id: string) => project.board.nodes.find((n) => n.id === id)?.kind
   const feeding = (id: string) =>
     project.board.edges
       .filter((e) => e.to === id)
       .map((e) => e.from)
-      .filter((from) => project.board.nodes.find((n) => n.id === from)?.kind === 'assembly')
+      .filter((from) => kindOf(from) === 'assembly')
+  const found: string[] = []
   const seen = new Set<string>()
   let level = feeding(stageId)
   while (level.length) {
@@ -286,16 +288,22 @@ export function previousAnimation(project: Project, stageId: string): string | n
       for (const earlier of feeding(asm)) {
         if (seen.has(earlier)) continue
         seen.add(earlier)
-        const animation = project.board.edges.find(
-          (e) => e.from === earlier && e.to !== stageId && saysSomething(project, e.to),
-        )
-        if (animation) return animation.to
+        for (const e of project.board.edges) {
+          if (e.from !== earlier || e.to === stageId || kindOf(e.to) !== 'animation') continue
+          if (!found.includes(e.to)) found.push(e.to)
+        }
         next.push(earlier)
       }
     }
     level = next
   }
-  return null
+  return found
+}
+
+/** The last animation before `stageId` in its chain of assemblies that
+ *  says anything about where pieces are. Null at the start of a chain. */
+export function previousAnimation(project: Project, stageId: string): string | null {
+  return earlierAnimations(project, stageId).find((id) => saysSomething(project, id)) ?? null
 }
 
 /** Has animation `stageId` take up where the last animation before it in
