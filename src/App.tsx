@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useStore } from '@/store'
 import { BoardView } from '@/views/BoardView/BoardView'
 import { ProjectsView } from '@/views/ProjectsView/ProjectsView'
@@ -15,6 +16,7 @@ export function App() {
   const view = useStore((s) => s.view)
   const aid = useStore((s) => s.aid)
   const setCtrlDown = useStore((s) => s.setCtrlDown)
+  const backToBoard = useStore((s) => s.backToBoard)
 
   // (stage shortcuts — undo, playback, timeline — live in useShortcuts,
   // mounted by WorldView)
@@ -49,9 +51,11 @@ export function App() {
       {/* Keying by stage id forces a clean remount (and a fresh WorldSession)
           whenever the user switches to a different stage. */}
       {view === 'world' && aid && (
-        <Suspense fallback={null}>
-          <WorldView key={aid} stageId={aid} />
-        </Suspense>
+        <ErrorBoundary key={aid} area="the 3D view" exitLabel="Back to board" onExit={backToBoard}>
+          <Suspense fallback={null}>
+            <WorldView key={aid} stageId={aid} />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   )
