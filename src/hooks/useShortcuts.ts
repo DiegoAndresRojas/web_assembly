@@ -2,8 +2,7 @@
 // while typing in a field.
 //
 //   Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y)   undo / redo
-//   Space                            play / pause (observer: play, pause, continue)
-//   ← / →                            observer chain: previous / next step
+//   Space                            play / pause
 //   Home                             playhead to 0
 //   Delete / Backspace               delete the selected action
 //   Ctrl+D                           duplicate the selected action
@@ -76,20 +75,6 @@ export function useShortcuts(session: WorldSession | null): void {
         return
       }
 
-      if (s.wmode === 'observer' && e.key === ' ') {
-        e.preventDefault()
-        if (s.obsPhase === 'playing' || s.obsPhase === 'returning') s.obsPause()
-        else if (s.obsPhase === 'paused' && !s.worldAltered) s.obsContinue()
-        else s.obsPlay()
-        return
-      }
-      // observer chains: previous / next step
-      if (s.wmode === 'observer' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        e.preventDefault()
-        if (e.key === 'ArrowLeft') s.obsPrev()
-        else s.obsNext()
-        return
-      }
       if (s.wmode !== 'animate') return
 
       const sel = s.selection && s.selection.actionId !== 'init' ? s.selection : null

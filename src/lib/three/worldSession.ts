@@ -69,7 +69,7 @@ export class WorldSession {
    *  'part' picks the deepest piece inside an assembly input, reported as
    *  its part key (`asm/…/mesh`). */
   private pickDepth: 'top' | 'part' = 'top'
-  /** No orbit, picking or gizmo — an observer playing its animation. */
+  /** No orbit, picking or gizmo — while a playback owns the world. */
   private locked = false
   /** The animation camera owns the view: OrbitControls must not update
    *  (its update() would re-aim the camera at the orbit target). */

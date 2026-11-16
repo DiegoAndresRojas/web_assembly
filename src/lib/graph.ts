@@ -124,7 +124,7 @@ function collectParts(
 }
 
 /** The key one level up (`asm/inner/mesh` → `asm/inner`), or null for a
- *  top-level key. An observer prefix (`obsId::`) is kept. */
+ *  top-level key. */
 export function parentKey(key: string): string | null {
   const i = key.lastIndexOf(PART_SEP)
   return i < 0 ? null : key.slice(0, i)
@@ -161,55 +161,6 @@ export function inputLabel(project: Project | null, nodeId: string | null): stri
   return node.label ?? node.kind
 }
 
-/** What an observer plays: the animations wired into it on the board —
- *  only animations (another observer wired in is an earlier step). */
-export function observedStageIds(project: Project | null, stageNodeId: string): string[] {
-  if (!project) return []
-  const ids: string[] = []
-  for (const e of project.board.edges) {
-    if (e.to !== stageNodeId) continue
-    if (nodeById(project, e.from)?.kind === 'animation' && !ids.includes(e.from)) ids.push(e.from)
-  }
-  return ids
-}
-
-/** The sequential steps of an observer chain (OB1 → OB2 → OB3), in chain
- *  order. A chain is one entity: opening any of its observers plays all of
- *  its steps. */
-export function observerSteps(project: Project | null, observerId: string): string[] {
-  if (!project) return [observerId]
-  const isObs = (id: string) => nodeById(project, id)?.kind === 'observer'
-  const links = project.board.edges.filter((e) => isObs(e.from) && isObs(e.to))
-  // every observer connected to this one, either way
-  const chain = new Set([observerId])
-  for (let grew = true; grew;) {
-    grew = false
-    for (const e of links) {
-      if (chain.has(e.from) !== chain.has(e.to)) {
-        chain.add(e.from)
-        chain.add(e.to)
-        grew = true
-      }
-    }
-  }
-  // earliest first: an observer comes after everything wired into it
-  const out: string[] = []
-  const visit = (id: string, path: Set<string>) => {
-    if (path.has(id) || out.includes(id)) return
-    const next = new Set(path).add(id)
-    for (const e of links) if (e.to === id && chain.has(e.from)) visit(e.from, next)
-    out.push(id)
-  }
-  for (const n of project.board.nodes) if (chain.has(n.id)) visit(n.id, new Set())
-  return out
-}
-
-/** Object-key prefix for a stage observed in one step — each step brings
- *  its own pieces, even when two steps observe the same stage. */
-export function stepPrefix(stepId: string, stageId: string): string {
-  return stepId + '>' + stageId + '::'
-}
-
 /** Whether `toId` is reachable from `fromId` following board edges. */
 function reaches(project: Project, fromId: string, toId: string): boolean {
   const seen = new Set<string>()
@@ -226,11 +177,7 @@ function reaches(project: Project, fromId: string, toId: string): boolean {
 
 /** Which stage kinds may take another stage's output as input. */
 const STAGE_OUTPUTS: Record<string, NodeKind[]> = {
-  // (observers play animations only)
   assembly: ['assembly', 'animation'],
-  animation: ['observer'],
-  // observer → observer chains sequential steps (see observerSteps)
-  observer: ['observer'],
 }
 
 /** The directed edge to create when the user links `a` to `b` (dragged
@@ -248,8 +195,6 @@ export function edgeFor(
   const bMesh = b.kind === 'mesh'
   if (aMesh && bMesh) return null
   if (aMesh || bMesh) {
-    // an observer shows stages (animations / assemblies), never loose meshes
-    if (a.kind === 'observer' || b.kind === 'observer') return null
     return aMesh ? { from: a.id, to: b.id } : { from: b.id, to: a.id }
   }
   const allowed = (from: BoardNode, to: BoardNode) =>

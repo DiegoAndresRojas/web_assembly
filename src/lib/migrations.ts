@@ -27,11 +27,13 @@ import type {
 // 6: mesh → observer edges dropped (observers take stages only; those edges
 //    came from an over-eager drop-to-link on the board).
 // 7: assembly → observer edges dropped (observers play animations only).
+// 8: observer nodes removed altogether (with their stages and edges); the
+//    end-user player is being rebuilt as its own read-only mode.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 7
+export const CURRENT_VERSION = 8
 
-const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'observer', 'animation']
+const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
 
 function asVec3(v: unknown): Vec3 {
@@ -171,7 +173,7 @@ export function normalizeStage(raw: unknown): Stage {
     string,
     unknown
   >
-  const kind = s.kind === 'observer' || s.kind === 'animation' ? s.kind : 'assembly'
+  const kind = s.kind === 'animation' ? 'animation' : 'assembly'
   const camera =
     s.camera && typeof s.camera === 'object'
       ? {
@@ -209,16 +211,11 @@ export function normalizeProject(raw: unknown): Project | null {
   const edges = Array.isArray(boardRaw.edges)
     ? boardRaw.edges.map(normalizeEdge).filter((e): e is BoardEdge => !!e)
     : []
-  const kindOf = (id: string) => nodes.find((n) => n.id === id)?.kind
+  const nodeIds = new Set(nodes.map((n) => n.id))
   const board: Board = {
     nodes,
-    // an observer takes animations (and observers, as steps) only
-    edges: edges.filter(
-      (e) =>
-        kindOf(e.to) !== 'observer' ||
-        kindOf(e.from) === 'animation' ||
-        kindOf(e.from) === 'observer',
-    ),
+    // edges of nodes that no longer exist (e.g. removed node kinds) go too
+    edges: edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to)),
   }
 
   const stages: Record<string, Stage> = {}
@@ -226,8 +223,9 @@ export function normalizeProject(raw: unknown): Project | null {
     string,
     unknown
   >
+  const stageIds = new Set(nodes.filter((n) => n.kind !== 'mesh').map((n) => n.id))
   for (const id of Object.keys(rawStages)) {
-    stages[id] = normalizeStage(rawStages[id])
+    if (stageIds.has(id)) stages[id] = normalizeStage(rawStages[id])
   }
   for (const n of nodes) {
     if (n.kind !== 'mesh' && !stages[n.id]) {

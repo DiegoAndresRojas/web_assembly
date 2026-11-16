@@ -1,6 +1,6 @@
 import type { PointerEvent } from 'react'
 
-import { EyeIcon, FilmIcon, LinkHandleIcon, PlusIcon } from '@/components/icons'
+import { FilmIcon, LinkHandleIcon, PlusIcon } from '@/components/icons'
 import { MESH_H, MESH_W, NODE_W } from '@/lib/constants'
 import type { BoardNode as BoardNodeData, MeshRecord } from '@/types/project'
 

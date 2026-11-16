@@ -11,7 +11,6 @@ import { AssemblyPanel } from './AssemblyPanel'
 import { CamDeleteDialog } from './CamDeleteDialog'
 import { DownloadDialog } from './DownloadDialog'
 import { GapDialog } from './GapDialog'
-import { ObserverPanel } from './ObserverPanel'
 import { TrackDeleteDialog } from './TrackDeleteDialog'
 import { WorldViewport } from './WorldViewport'
 
@@ -65,7 +64,6 @@ export function WorldView({ stageId }: { stageId: string }) {
           {wmode === 'assembly' && (
             <AssemblyPanel project={project} stageId={stageId} stage={stage} />
           )}
-          {wmode === 'observer' && <ObserverPanel />}
         </aside>
 
         <WorldViewport stageId={stageId} onSession={onSession} />

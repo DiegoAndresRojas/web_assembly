@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 
-import { BackIcon, EyeIcon, FilmIcon, PlusIcon } from '@/components/icons'
+import { BackIcon, FilmIcon, PlusIcon } from '@/components/icons'
 import { useStore } from '@/store'
 import { BoardCanvas } from './BoardCanvas'
 import { ColorDialog } from './ColorDialog'

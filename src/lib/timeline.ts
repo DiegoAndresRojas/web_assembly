@@ -2,7 +2,7 @@
 // store — pose-at-time with chained actions and easing, durations, and the
 // pure geometry the timeline UI needs (clamping drags so actions never
 // overlap, snapping, ruler ticks). No DOM; three.js is used for its math
-// only (the observer's return-to-start tween slerps rotations).
+// only (tweenPoses slerps rotations).
 import * as THREE from 'three'
 
 import { clamp } from './utils'

@@ -17,7 +17,6 @@ import { useWorldSession } from '@/hooks/useWorldSession'
 import { parentKey } from '@/lib/graph'
 import { useStore } from '@/store'
 import type { WorldSession } from '@/lib/three/worldSession'
-import { ObserverTransport } from './ObserverTransport'
 
 export interface WorldViewportProps {
   stageId: string
@@ -28,8 +27,6 @@ function hintFor(
   wmode: string,
   kpOn: boolean,
   pendingPicks: number,
-  obsPhase: string,
-  worldAltered: boolean,
   lookingThrough: boolean,
 ): string {
   if (wmode === 'assembly') {
@@ -40,19 +37,9 @@ function hintFor(
     }
     return 'Drag to orbit. Click a mesh, then check Select keypoints to link two points.'
   }
-  if (wmode === 'animate') {
-    if (lookingThrough)
-      return 'Previewing through the animation camera — scrub or play to see the shot.'
-    return 'Click a piece to select it (Esc: the assembly holding it). Move it, then Record pose (K).'
-  }
-  if (obsPhase === 'returning' || obsPhase === 'playing')
-    return 'Animation mode — pause to take control.'
-  if (obsPhase === 'paused') {
-    return worldAltered
-      ? 'The world changed — Play starts the animation over.'
-      : 'Paused. Move pieces freely, or Continue.'
-  }
-  return 'Drag to orbit. Click a piece to move or rotate it.'
+  if (lookingThrough)
+    return 'Previewing through the animation camera — scrub or play to see the shot.'
+  return 'Click a piece to select it (Esc: the assembly holding it). Move it, then Record pose (K).'
 }
 
 export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
@@ -65,8 +52,6 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
   const hint = useStore((s) => s.hint)
   const kpOn = useStore((s) => s.kpOn)
   const pendingPicks = useStore((s) => s.pendingPicks)
-  const obsPhase = useStore((s) => s.obsPhase)
-  const worldAltered = useStore((s) => s.worldAltered)
   const cameraView = useStore((s) => s.cameraView)
   const setCameraView = useStore((s) => s.setCameraView)
   const hasCamTrack = useStore(
@@ -81,10 +66,8 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
     onSession(session)
   }, [session, onSession])
 
-  const observerLocked =
-    wmode === 'observer' && (obsPhase === 'returning' || obsPhase === 'playing')
   const lookingThrough = wmode === 'animate' && cameraView && hasCamTrack
-  const showGizmoTools = !!worldSelId && !observerLocked && !lookingThrough
+  const showGizmoTools = !!worldSelId && !lookingThrough
   const onDragOver = (e: DragEvent) => e.preventDefault()
 
   return (
@@ -184,7 +167,6 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
           </span>
         </div>
       )}
-      {wmode === 'observer' && <ObserverTransport stageId={stageId} />}
       <div
         className="text-muted"
         style={{
@@ -195,7 +177,7 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
           pointerEvents: 'none',
         }}
       >
-        {hint || hintFor(wmode, kpOn, pendingPicks.length, obsPhase, worldAltered, lookingThrough)}
+        {hint || hintFor(wmode, kpOn, pendingPicks.length, lookingThrough)}
       </div>
     </div>
   )
