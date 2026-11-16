@@ -1,14 +1,13 @@
-// Pure geometry for keypoint linking: snap-candidate search, local frames,
-// and single-axis rotation solving. No three.js dependency — callers that
+// Pure geometry for keypoint linking: local frames and single-axis
+// rotation solving. No three.js dependency — callers that
 // pick points on real geometry (lib/three/worldSession.ts, which owns the
 // raycaster) hand plain vectors in here and get plain vectors back. Typed
 // port of only_js/src/composables/useKeypoints.js.
 import { clamp } from './utils'
-import type { Axis, Pose, Vec3 } from '@/types/project'
+import type { Axis, Vec3 } from '@/types/project'
 
 const EPS = 1e-6
 const DEG = 180 / Math.PI
-const RAD = Math.PI / 180
 
 export const vec = {
   add: (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }),
@@ -27,38 +26,6 @@ export const vec = {
     return l < EPS ? { x: 0, y: 0, z: 0 } : vec.scale(a, 1 / l)
   },
   negate: (a: Vec3): Vec3 => ({ x: -a.x, y: -a.y, z: -a.z }),
-}
-
-function rotX(p: Vec3, rad: number): Vec3 {
-  const c = Math.cos(rad)
-  const s = Math.sin(rad)
-  return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c }
-}
-function rotY(p: Vec3, rad: number): Vec3 {
-  const c = Math.cos(rad)
-  const s = Math.sin(rad)
-  return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c }
-}
-function rotZ(p: Vec3, rad: number): Vec3 {
-  const c = Math.cos(rad)
-  const s = Math.sin(rad)
-  return { x: p.x * c - p.y * s, y: p.x * s + p.y * c, z: p.z }
-}
-
-/** Rotates a vector by an Euler rotation in degrees, matching three.js's
- *  'XYZ' order (the one applyPose uses): the matrix is Rx·Ry·Rz, so the
- *  vector turns about Z first, then Y, then X. */
-export function rotateEuler(v: Vec3, deg: Vec3): Vec3 {
-  return rotX(rotY(rotZ(v, deg.z * RAD), deg.y * RAD), deg.x * RAD)
-}
-
-/** Inverse of rotateEuler: X, then Y, then Z, each negated. */
-export function rotateEulerInverse(v: Vec3, deg: Vec3): Vec3 {
-  return rotZ(rotY(rotX(v, -deg.x * RAD), -deg.y * RAD), -deg.z * RAD)
-}
-
-export function pointWorld(pose: Pose, local: Vec3): Vec3 {
-  return vec.add(rotateEuler(local, pose.rot), pose.pos)
 }
 
 const AXES: Record<Axis, Vec3> = {
@@ -95,10 +62,6 @@ export function solveAxisAlign(axis: Axis, normalAWorld: Vec3, normalBWorld: Vec
   return rad === null ? null : rad * DEG
 }
 
-export function gap(pointAWorld: Vec3, pointBWorld: Vec3): number {
-  return vec.distance(pointAWorld, pointBWorld)
-}
-
 export interface Frame {
   origin: Vec3
   normal: Vec3
@@ -115,26 +78,4 @@ export function frameAt(point: Vec3, normal: Vec3, hintUp?: Vec3): Frame {
   const tangent = vec.normalize(vec.cross(up, n))
   const bitangent = vec.cross(n, tangent)
   return { origin: point, normal: n, tangent, bitangent }
-}
-
-export interface Candidate<T> {
-  index: number
-  point: T
-  dist: number
-}
-
-/** Nearest candidate points to `target`, closest first, capped at `limit`
- *  (default 6) within `radius` (default Infinity). */
-export function nearestCandidates<T extends Vec3>(
-  points: T[],
-  target: Vec3,
-  opts?: { radius?: number; limit?: number },
-): Candidate<T>[] {
-  const radius = opts?.radius ?? Infinity
-  const limit = opts?.limit ?? 6
-  return points
-    .map((p, i) => ({ index: i, point: p, dist: vec.distance(p, target) }))
-    .filter((c) => c.dist <= radius)
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, limit)
 }

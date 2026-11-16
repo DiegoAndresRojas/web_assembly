@@ -67,11 +67,6 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         state.zoom = 1
       })
     },
-    panBy(dx, dy) {
-      set((state) => {
-        state.pan = { x: state.pan.x + dx, y: state.pan.y + dy }
-      })
-    },
     setPan(x, y) {
       set((state) => {
         state.pan = { x, y }

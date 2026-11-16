@@ -1,5 +1,5 @@
 // Canvas capture for animation export: a WebM video via MediaRecorder, or a
-// sequence of PNG frame blobs (zipped up by store/exportingSlice.ts). Typed
+// sequence of PNG frame blobs (zipped up by hooks/useExport.ts). Typed
 // port of only_js/src/composables/useRecorder.js.
 
 function pickWebmMime(): string {

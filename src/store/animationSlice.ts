@@ -65,12 +65,6 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         state.playing = !playing && dur > 0
       })
     },
-    onAnimReset() {
-      set((state) => {
-        state.playing = false
-        state.playT = 0
-      })
-    },
     seekTo(t) {
       set((state) => {
         state.playT = Math.max(0, t)

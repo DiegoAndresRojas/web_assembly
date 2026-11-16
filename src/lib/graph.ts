@@ -29,13 +29,6 @@ export function edgesTouching(project: Project | null, nodeId: string): BoardEdg
   return project.board.edges.filter((e) => e.from === nodeId || e.to === nodeId)
 }
 
-/** Board "mesh" nodes wired into the given stage node (edge.from -> stage). */
-export function meshNodesInStage(project: Project | null, stageNodeId: string): BoardNode[] {
-  if (!project) return []
-  const ids = new Set(project.board.edges.filter((e) => e.to === stageNodeId).map((e) => e.from))
-  return project.board.nodes.filter((n) => n.kind === 'mesh' && ids.has(n.id))
-}
-
 /** Every input wired into a stage — the read-only half of what a stage's
  *  `members` list needs (pose/visibility comes from the stage record
  *  itself, keyed by node.id). An input is either a mesh node (`mesh` set)
@@ -202,19 +195,6 @@ export function edgeFor(
   if (allowed(a, b)) return { from: a.id, to: b.id }
   if (allowed(b, a)) return { from: b.id, to: a.id }
   return null
-}
-
-/** Stage node ids that a given mesh-node is wired into. */
-export function stagesForMeshNode(project: Project | null, meshNodeId: string): string[] {
-  if (!project) return []
-  return project.board.edges.filter((e) => e.from === meshNodeId).map((e) => e.to)
-}
-
-/** Every board "mesh" node that points at a given library mesh (a file can
- *  be dragged onto the board more than once). */
-export function nodesForMesh(project: Project | null, meshId: string): BoardNode[] {
-  if (!project) return []
-  return project.board.nodes.filter((n) => n.kind === 'mesh' && n.meshId === meshId)
 }
 
 export function degree(project: Project | null, nodeId: string): number {

@@ -13,8 +13,6 @@ export interface Pose {
   rot: Vec3
 }
 
-export type MeshExt = 'glb' | 'gltf' | 'obj' | 'stl'
-
 export interface MeshRecord {
   id: string
   name: string

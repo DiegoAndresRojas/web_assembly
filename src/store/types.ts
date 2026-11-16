@@ -111,7 +111,6 @@ export interface BoardActions {
   zoomIn: () => void
   zoomOut: () => void
   resetView: () => void
-  panBy: (dx: number, dy: number) => void
   setPan: (x: number, y: number) => void
   dropMeshOnBoard: (meshId: string, x: number, y: number) => void
   dropStageOnBoard: (kind: 'assembly' | 'animation', x: number, y: number) => void
@@ -235,8 +234,6 @@ export interface AnimationState {
 
 export interface AnimationActions {
   onAnimPlay: () => void
-  /** Pause and go back to t = 0. */
-  onAnimReset: () => void
   seekTo: (t: number) => void
   setLoop: (on: boolean) => void
   setSnap: (on: boolean) => void
