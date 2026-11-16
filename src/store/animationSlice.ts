@@ -96,6 +96,12 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         state.cameraView = on
       })
     },
+    setStageFrame(format) {
+      set((state) => {
+        const stage = state.projects.find((p) => p.id === state.pid)?.stages[state.aid ?? '']
+        if (stage) stage.frame = format
+      })
+    },
 
     addMeshTrack(nodeId) {
       const found = get().projects.find((p) => p.id === get().pid)?.stages[get().aid ?? '']

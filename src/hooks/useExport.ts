@@ -8,9 +8,19 @@ import { stageDuration } from '@/lib/timeline'
 import { exportGroup, type DownloadFormat } from '@/lib/three/buildMesh'
 import { captureFrames, recordWebm } from '@/lib/three/recorder'
 import type { WorldSession } from '@/lib/three/worldSession'
+import { aspectOf, exportSize } from '@/lib/videoFormat'
 import { buildZip } from '@/lib/zip'
 import { useStore } from '@/store'
+import type { Stage } from '@/types/project'
 import { applyStageAt } from './useWorldSession'
+
+/** The shape a stage's video comes out in: the animation camera's frame
+ *  when the stage animates one, otherwise the viewport as it is on screen
+ *  (the video is then shot through the working view). */
+export function videoAspect(session: WorldSession, stage: Stage): number {
+  const hasCamera = stage.tracks.some((t) => t.targetKind === 'camera')
+  return hasCamera ? aspectOf(stage.frame) : session.viewportAspect()
+}
 
 export function useExport(session: WorldSession | null) {
   const doDownload = useCallback(() => {
@@ -35,7 +45,7 @@ export function useExport(session: WorldSession | null) {
 
   const doVideoExport = useCallback(() => {
     const state = useStore.getState()
-    const { pid, aid, videoFormat, projects } = state
+    const { pid, aid, videoFormat, videoBackground, videoColor, projects } = state
     const project = projects.find((p) => p.id === pid)
     const stage = project && aid ? project.stages[aid] : null
     const duration = stage ? stageDuration(stage) : 0
@@ -49,9 +59,16 @@ export function useExport(session: WorldSession | null) {
     }
     state.setExportBusy(true)
     state.setExportError(null)
+    // playback would keep posing the pieces between captured frames
+    if (state.playing) state.seekTo(state.playT)
     const fps = 30
-    // always a 16:9 video (1280×720), whatever the viewport's shape
-    const canvas = session.beginExport(1280, 720) ?? session.renderer.domElement
+    const { width, height } = exportSize(videoAspect(session, stage))
+    const background =
+      videoBackground === 'color'
+        ? videoColor
+        : videoBackground === 'transparent'
+          ? null
+          : 'workspace'
     // shot through the animation camera (its own object in the world) when
     // the stage animates one, else through the working view
     const renderFrame = (t: number) => {
@@ -62,6 +79,7 @@ export function useExport(session: WorldSession | null) {
     // the render loop keeps drawing between captured frames (and a WebM
     // records whatever is on the canvas) — have it draw the same shot
     session.setLookThrough(true)
+    const canvas = session.beginExport(width, height, background) ?? session.renderer.domElement
     const restore = () => {
       const s = useStore.getState()
       session.endExport()

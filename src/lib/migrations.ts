@@ -2,6 +2,7 @@
 // Typed port of only_js/src/store/migrations.js — the store's Zustand
 // `persist` middleware calls `run()` as its `migrate` function.
 import { clamp, num, uid } from './utils'
+import { DEFAULT_FRAME_FORMAT, isFrameFormat } from './videoFormat'
 import type {
   Board,
   BoardEdge,
@@ -29,9 +30,10 @@ import type {
 // 7: assembly → observer edges dropped (observers play animations only).
 // 8: observer nodes removed altogether (with their stages and edges); the
 //    end-user player is being rebuilt as its own read-only mode.
+// 9: per-stage camera frame format (16:9 until chosen otherwise).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 8
+export const CURRENT_VERSION = 9
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -183,6 +185,7 @@ export function normalizeStage(raw: unknown): Stage {
       : null
   return {
     kind,
+    frame: isFrameFormat(s.frame) ? s.frame : DEFAULT_FRAME_FORMAT,
     members: Array.isArray(s.members)
       ? s.members.map(normalizeMember).filter((m): m is StageMember => !!m)
       : [],

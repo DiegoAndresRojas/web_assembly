@@ -78,6 +78,13 @@ export class WorldSession {
   private animRig: AnimCameraRig | null = null
   /** Render through the animation camera instead of the working one. */
   private lookThrough = false
+  /** Width ÷ height of the animation camera's frame. */
+  private frameAspect = ANIM_ASPECT
+  /** Opacity of whatever is cleared behind the scene: 1 except while
+   *  exporting with a transparent background. */
+  private clearAlpha = 1
+  private grid: THREE.GridHelper | null = null
+  private gizmoHelper: THREE.Object3D | null = null
   private raycaster = new THREE.Raycaster()
   private ndc = new THREE.Vector2()
 
@@ -105,7 +112,13 @@ export class WorldSession {
     camera.position.set(4, 3, 5)
     this.camera = camera
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
+    // alpha: an export can leave the background out altogether; while
+    // editing, the scene's own background keeps the canvas opaque
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+      alpha: true,
+    })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     container.appendChild(renderer.domElement)
     this.renderer = renderer
@@ -114,7 +127,8 @@ export class WorldSession {
     const dir = new THREE.DirectionalLight(0xffffff, 1.4)
     dir.position.set(4, 6, 4)
     scene.add(dir)
-    scene.add(new THREE.GridHelper(20, 20, 0x3a3752, 0x24223a))
+    this.grid = new THREE.GridHelper(20, 20, 0x3a3752, 0x24223a)
+    scene.add(this.grid)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -131,14 +145,15 @@ export class WorldSession {
       const obj = this.selectedId ? this.getObject(this.selectedId) : null
       if (!e.value && obj && this.selectedId) opts.onObjectMoved?.(this.selectedId, readPose(obj))
     })
-    scene.add(gizmo.getHelper())
+    this.gizmoHelper = gizmo.getHelper()
+    scene.add(this.gizmoHelper)
     this.gizmo = gizmo
 
     const rig = new AnimCameraRig(camera.fov)
     scene.add(rig.root)
     this.animRig = rig
 
-    // (the animation camera keeps its fixed 16:9 frame)
+    // (the animation camera keeps its own frame, see setFrameAspect)
     const resize = () => {
       if (this.exportSize) return // export owns the canvas size until it ends
       const w = Math.max(1, container.clientWidth)
@@ -666,22 +681,37 @@ export class WorldSession {
     return true
   }
 
-  /** Renders a 16:9 camera into the largest 16:9 rectangle that fits the
-   *  canvas, black bars around it — exactly the shot video export records. */
+  /** Sets the shape of the animation camera's frame (width ÷ height). */
+  setFrameAspect(aspect: number): void {
+    if (!(aspect > 0) || aspect === this.frameAspect) return
+    this.frameAspect = aspect
+    this.animRig?.setAspect(aspect)
+  }
+
+  /** Width ÷ height of the viewport as it is on screen. */
+  viewportAspect(): number {
+    const w = this.container.clientWidth
+    const h = this.container.clientHeight
+    return w > 0 && h > 0 ? w / h : ANIM_ASPECT
+  }
+
+  /** Renders the animation camera into the largest rectangle of its frame
+   *  shape that fits the canvas, black bars around it — exactly the shot
+   *  video export records. */
   private renderFramed(cam: THREE.Camera): void {
     const { renderer, scene } = this
     if (!renderer || !scene) return
     const size = renderer.getSize(new THREE.Vector2())
     let w = size.x
-    let h = w / ANIM_ASPECT
+    let h = w / this.frameAspect
     if (h > size.y) {
       h = size.y
-      w = h * ANIM_ASPECT
+      w = h * this.frameAspect
     }
     const x = (size.x - w) / 2
     const y = (size.y - h) / 2
     renderer.setScissorTest(false)
-    renderer.setClearColor(0x000000)
+    renderer.setClearColor(0x000000, this.clearAlpha)
     renderer.clear()
     renderer.setViewport(x, y, w, h)
     renderer.setScissor(x, y, w, h)
@@ -694,26 +724,57 @@ export class WorldSession {
   // ---------- video export ----------
 
   private resize: (() => void) | null = null
-  private exportSize: { pixelRatio: number } | null = null
+  private exportSize: {
+    pixelRatio: number
+    background: THREE.Scene['background']
+    gridVisible: boolean
+    gizmoVisible: boolean
+  } | null = null
 
-  /** Switches the canvas to a fixed 16:9 video size (CSS size untouched)
-   *  for the length of an export; the working camera — used when the stage
-   *  animates no camera — is framed 16:9 too. Returns the canvas. */
-  beginExport(width = 1280, height = 720): HTMLCanvasElement | null {
-    const { renderer, camera } = this
-    if (!renderer || !camera) return null
-    this.exportSize = { pixelRatio: renderer.getPixelRatio() }
+  /** Switches the canvas to a fixed video size (CSS size untouched) for
+   *  the length of an export; the working camera — used when the stage
+   *  animates no camera — takes that shape too. `background` is what the
+   *  video shows behind the pieces: a CSS color, `null` for nothing at all
+   *  (transparent), or `'workspace'` for the editing backdrop and grid.
+   *  The gizmo never makes it into the shot. Returns the canvas. */
+  beginExport(
+    width: number,
+    height: number,
+    background: string | null | 'workspace' = 'workspace',
+  ): HTMLCanvasElement | null {
+    const { renderer, camera, scene } = this
+    if (!renderer || !camera || !scene) return null
+    if (this.exportSize) this.endExport()
+    this.exportSize = {
+      pixelRatio: renderer.getPixelRatio(),
+      background: scene.background,
+      gridVisible: this.grid?.visible ?? true,
+      gizmoVisible: this.gizmoHelper?.visible ?? true,
+    }
     renderer.setPixelRatio(1)
     renderer.setSize(width, height, false)
     camera.aspect = width / height
     camera.updateProjectionMatrix()
+    if (this.gizmoHelper) this.gizmoHelper.visible = false
+    if (background !== 'workspace') {
+      if (this.grid) this.grid.visible = false
+      scene.background = background === null ? null : new THREE.Color(background)
+      this.clearAlpha = background === null ? 0 : 1
+      renderer.setClearColor(0x000000, this.clearAlpha)
+    }
     return renderer.domElement
   }
 
   endExport(): void {
-    const { renderer } = this
-    if (!renderer || !this.exportSize) return
-    renderer.setPixelRatio(this.exportSize.pixelRatio)
+    const { renderer, scene } = this
+    const saved = this.exportSize
+    if (!renderer || !saved) return
+    renderer.setPixelRatio(saved.pixelRatio)
+    if (scene) scene.background = saved.background
+    if (this.grid) this.grid.visible = saved.gridVisible
+    if (this.gizmoHelper) this.gizmoHelper.visible = saved.gizmoVisible
+    this.clearAlpha = 1
+    renderer.setClearColor(0x000000, 1)
     this.exportSize = null
     this.resize?.()
   }

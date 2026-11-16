@@ -14,6 +14,7 @@ import type { Object3D } from 'three'
 
 import { assemblyParts, membersOf, parentKey, restPoseOf } from '@/lib/graph'
 import { evalStage, stageDuration } from '@/lib/timeline'
+import { aspectOf } from '@/lib/videoFormat'
 import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
 import { buildInput } from '@/lib/three/stageInput'
 import { WorldSession, type PickHit } from '@/lib/three/worldSession'
@@ -322,6 +323,14 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
   useEffect(() => {
     session?.setLookThrough(wmode === 'animate' && cameraView && hasCamTrack)
   }, [session, wmode, cameraView, hasCamTrack])
+
+  // the animation camera's frame shape (preview bars, view pyramid, export)
+  const frame = useStore((s) =>
+    stageId ? (selectCurrentProject(s)?.stages[stageId]?.frame ?? null) : null,
+  )
+  useEffect(() => {
+    if (frame) session?.setFrameAspect(aspectOf(frame))
+  }, [session, frame])
 
   useEffect(() => {
     session?.setSelected(worldSelId)

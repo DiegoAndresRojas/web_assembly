@@ -5,8 +5,10 @@
 import type { Draft } from 'immer'
 
 import type { SnapMode } from '@/lib/three/surfaceSnap'
+import type { VideoBackground } from '@/lib/videoFormat'
 import type {
   Axis,
+  FrameFormat,
   KeypointLink,
   PickHit,
   Pose,
@@ -242,6 +244,8 @@ export interface AnimationActions {
   setZoom: (pxPerSecond: number) => void
   setDockHeight: (px: number) => void
   setCameraView: (on: boolean) => void
+  /** The shape of the open stage's camera frame (preview and export). */
+  setStageFrame: (format: FrameFormat) => void
 
   addMeshTrack: (nodeId: string) => void
   addCameraTrack: (currentCameraPose?: Pose) => void
@@ -275,6 +279,10 @@ export interface ExportState {
   dlFormat: 'glb' | 'obj' | 'stl'
   videoAsk: boolean
   videoFormat: 'webm' | 'zip'
+  /** What an exported video shows behind the pieces. */
+  videoBackground: VideoBackground
+  /** The flat color used when `videoBackground` is 'color'. */
+  videoColor: string
   exportBusy: boolean
   exportError: string | null
 }
@@ -286,6 +294,8 @@ export interface ExportActions {
   openVideoAsk: () => void
   closeVideoAsk: () => void
   setVideoFormat: (f: 'webm' | 'zip') => void
+  setVideoBackground: (background: VideoBackground) => void
+  setVideoColor: (color: string) => void
   setExportBusy: (busy: boolean) => void
   setExportError: (err: string | null) => void
 }

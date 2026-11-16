@@ -112,8 +112,13 @@ export interface StageUnion {
   at: number
 }
 
+/** The shape of the animation camera's frame — what "look through" shows
+ *  and video export records. */
+export type FrameFormat = '16:9' | '9:16' | '1:1' | '4:3'
+
 export interface Stage {
   kind: StageKind
+  frame: FrameFormat
   members: StageMember[]
   links: KeypointLink[]
   camera: StageCamera | null
