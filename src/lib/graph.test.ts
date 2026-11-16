@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { edgeFor, membersOf, nodeById, parentKey } from './graph'
+import { edgeFor, lockedKey, membersOf, nodeById, parentKey } from './graph'
 import { normalizeProject } from './migrations'
 import type { BoardNode, Project } from '@/types/project'
 
@@ -83,6 +83,22 @@ describe('membersOf', () => {
 
   it('is empty for a stage with nothing wired in', () => {
     expect(membersOf(project(), 'a1')).toEqual([])
+  })
+})
+
+describe('lockedKey', () => {
+  it('picks the outermost locked assembly on the way to a piece', () => {
+    expect(lockedKey('asm/inner/mesh', [])).toBe('asm')
+    expect(lockedKey('asm/inner/mesh', ['asm'])).toBe('asm/inner')
+    expect(lockedKey('asm/inner/mesh', ['asm', 'asm/inner'])).toBe('asm/inner/mesh')
+  })
+
+  it('keeps an inner assembly locked behind a locked outer one', () => {
+    expect(lockedKey('asm/inner/mesh', ['asm/inner'])).toBe('asm')
+  })
+
+  it('leaves a stage input as it is', () => {
+    expect(lockedKey('mesh', [])).toBe('mesh')
   })
 })
 

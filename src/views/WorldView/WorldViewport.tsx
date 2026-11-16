@@ -39,7 +39,7 @@ function hintFor(
   }
   if (lookingThrough)
     return 'Previewing through the animation camera — scrub or play to see the shot.'
-  return 'Click a piece to select it (Esc: the assembly holding it). Move it, then Record pose (K).'
+  return 'Click to select — a locked assembly is picked whole; open its lock to reach its pieces. Move it, then Record pose (K).'
 }
 
 export function WorldViewport({ stageId, onSession }: WorldViewportProps) {

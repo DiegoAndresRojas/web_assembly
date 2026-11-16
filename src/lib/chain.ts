@@ -4,9 +4,10 @@
 //
 // An animation only takes inputs. A piece starts where its assembly put it
 // unless the animation holds a start pose for it (stage.startPoses). Those
-// are written at two moments, never recomputed behind the author's back:
-//   - when an assembly is first wired into the animation, from the last
-//     animation in the chain that covers each piece (chainStartPoses);
+// are written at set moments, never recomputed behind the author's back:
+//   - when an assembly is wired into the animation, and when one of its
+//     pieces (or the assembly itself) is put on the timeline: from the
+//     last animation earlier in the chain (recoverFromChain);
 //   - when the author imports positions from another animation
 //     (importedPoses).
 import { assemblyParts, membersOf, PART_SEP, restPoseOf } from './graph'
@@ -31,7 +32,9 @@ export function effectiveTrack(project: Project, stageId: string, track: Track):
   return start ? { ...track, initPose: start } : track
 }
 
-/** Where animation `stageId` has piece `key` when it starts or ends. */
+/** Where animation `stageId` has piece `key` when it starts or ends. An
+ *  animation that only sets where a piece starts (a track with no actions)
+ *  has it there at the end too. */
 export function poseIn(
   project: Project,
   stageId: string,
@@ -49,7 +52,8 @@ export function poseIn(
 }
 
 /** Every piece of a stage's scene with the pose it starts in: the stage's
- *  inputs and, for assembly inputs, every piece inside them. */
+ *  inputs and, for assembly inputs, every piece inside them — an input
+ *  first, then what it holds. */
 export function stagePieces(
   project: Project,
   stageId: string,
@@ -92,50 +96,16 @@ export function evalStageIn(project: Project, stageId: string, t: number): Stage
   return { meshes, camera }
 }
 
-// ---------- start poses from the chain ----------
+// ---------- poses taken from another animation ----------
 
-/** An animation that plays assembly `asmId` (fed by it on the board) and
- *  actually moves something. */
-function animationOf(project: Project, asmId: string): string | null {
-  for (const edge of project.board.edges) {
-    if (edge.from !== asmId) continue
-    const stage = project.stages[edge.to]
-    if (stage?.kind === 'animation' && stageDuration(stage) > 0) return edge.to
-  }
-  return null
+const lastSeg = (key: string) => key.slice(key.lastIndexOf(PART_SEP) + 1)
+
+function samePose(a: Pose, b: Pose): boolean {
+  const eps = 1e-4
+  return (['pos', 'rot'] as const).every((k) =>
+    (['x', 'y', 'z'] as const).every((axis) => Math.abs(a[k][axis] - b[k][axis]) < eps),
+  )
 }
-
-/** The pose the animations of the assemblies below `holder` leave a piece
- *  in. `path` leads from `holder` down to the piece: the assembly input
- *  holding it first. Null when none of them covers it. */
-function inherited(project: Project, holder: string, path: string[]): Pose | null {
-  if (path.length < 2) return null
-  const [asmId, ...inner] = path
-  // `holder` was assembled after those animations: where it re-placed a
-  // piece of its input stands
-  if (inner.length === 1 && project.stages[holder]?.partOverrides?.[path.join(PART_SEP)]) {
-    return null
-  }
-  const animation = animationOf(project, asmId)
-  if (animation) return poseIn(project, animation, path.join(PART_SEP), 'end')
-  return inherited(project, asmId, inner)
-}
-
-/** The start poses assembly input `asmId` brings into an animation the
- *  first time it is wired in: each piece mounted in an earlier assembly
- *  where the last animation in the chain that covers it left it. Pieces no
- *  animation has touched are left out (they start as assembled). */
-export function chainStartPoses(project: Project, asmId: string): Record<string, Pose> {
-  const poses: Record<string, Pose> = {}
-  for (const part of assemblyParts(project, asmId)) {
-    const [input, ...path] = part.key.split(PART_SEP)
-    const pose = inherited(project, input, path)
-    if (pose) poses[part.key] = pose
-  }
-  return poses
-}
-
-// ---------- start poses imported from another animation ----------
 
 /** How many trailing segments two keys have in common. */
 function sharedTail(a: string[], b: string[]): number {
@@ -153,8 +123,9 @@ function sharedTail(a: string[], b: string[]): number {
  *    through different assemblies (a duplicated assembly, a mesh wired
  *    into two of them, …): its pose has to go through world space.
  *
- *  An assembly is only ever matched the first way — a later assembly's
- *  placement of an earlier one is not something another animation undoes. */
+ *  An assembly is only ever matched the first way: where a later assembly
+ *  placed an earlier one inside itself is that assembly's business. (The
+ *  whole of it moves instead — see `alignedInput`.) */
 function matchIn(
   project: Project,
   theirKeys: string[],
@@ -168,9 +139,15 @@ function matchIn(
     if (shared && (!best || shared > best.shared)) best = { key: their, shared }
   }
   if (!best) return null
-  // two segments or more in common: the same piece held by the same thing
-  if (best.shared >= 2) return { key: best.key, same: true }
-  const leaf = project.board.nodes.find((n) => n.id === segs[segs.length - 1])
+  if (best.shared >= 2) {
+    // …unless the assembly holding it here put that piece somewhere else
+    // since: that placement stands
+    const [holder, asm, piece] = segs.slice(-3)
+    const replaced =
+      segs.length >= 3 && project.stages[holder]?.partOverrides?.[asm + PART_SEP + piece]
+    return replaced ? null : { key: best.key, same: true }
+  }
+  const leaf = project.board.nodes.find((n) => n.id === lastSeg(key))
   return leaf?.kind === 'mesh' ? { key: best.key, same: false } : null
 }
 
@@ -180,10 +157,38 @@ function pathKeys(key: string): string[] {
   return segs.map((_, i) => segs.slice(0, i + 1).join(PART_SEP))
 }
 
-/** Where a piece is in an animation's world: every pose from its input
- *  down to it, combined. */
-function worldPose(keys: string[], poseOf: (key: string) => Pose | null): Pose {
+/** Every pose along `keys`, combined: where the last of them is in the
+ *  space the first one is posed in. */
+function combined(keys: string[], poseOf: (key: string) => Pose | null): Pose {
   return keys.reduce((world, key) => composePoses(world, poseOf(key) ?? IDENTITY), IDENTITY)
+}
+
+/** Where assembly input `key` of this animation has to be so that the
+ *  assembly the other animation plays — which a later assembly holds
+ *  somewhere inside this one — is at the same place in the world as it is
+ *  over there. Null when this input does not contain one of the other
+ *  animation's inputs. */
+function alignedInput(
+  project: Project,
+  ourKeys: string[],
+  theirKeys: string[],
+  key: string,
+  startOf: (key: string) => Pose | null,
+  their: (key: string) => Pose | null,
+): Pose | null {
+  const isAssembly = (id: string) =>
+    project.board.nodes.find((n) => n.id === id)?.kind === 'assembly'
+  const theirInputs = theirKeys.filter((k) => !k.includes(PART_SEP) && isAssembly(k))
+  // the shallowest one, should it be nested here more than once
+  const inside = ourKeys
+    .filter((k) => k.startsWith(key + PART_SEP) && theirInputs.includes(lastSeg(k)))
+    .sort((a, b) => a.split(PART_SEP).length - b.split(PART_SEP).length)[0]
+  if (!inside) return null
+  const there = their(lastSeg(inside))
+  if (!there) return null
+  // where this input's own assembly chain puts that assembly, undone
+  const below = combined(pathKeys(inside).slice(1), startOf)
+  return composePoses(there, relativePose(below, IDENTITY))
 }
 
 /** The start poses animation `stageId` would take from animation
@@ -198,31 +203,27 @@ export function importedPoses(
   only: string | null = null,
 ): Record<string, Pose> {
   const theirs = stagePieces(project, fromStageId).map((p) => p.key)
+  const ours = stagePieces(project, stageId).map((p) => p.key)
+  const their = (k: string) => poseIn(project, fromStageId, k, at)
   const poses: Record<string, Pose> = {}
-  // parents first, so a piece is placed relative to where its parent ends up
+  // (inputs come before what they hold, so a piece is placed relative to
+  // where what holds it ends up)
   const startOf = (key: string) => poses[key] ?? startPoseOf(project, stageId, key)
-  for (const { key } of stagePieces(project, stageId)) {
+  for (const key of ours) {
     if (only && key !== only && !key.startsWith(only + PART_SEP)) continue
     const match = matchIn(project, theirs, key)
-    if (!match) continue
-    const their = (k: string) => poseIn(project, fromStageId, k, at)
-    let pose: Pose | null
-    if (match.same) pose = their(match.key)
-    else {
+    let pose: Pose | null = null
+    if (match?.same) pose = their(match.key)
+    else if (match) {
       // same place in the world as over there, expressed in what holds it here
-      const parent = worldPose(pathKeys(key).slice(0, -1), startOf)
-      pose = relativePose(parent, worldPose(pathKeys(match.key), their))
+      const parent = combined(pathKeys(key).slice(0, -1), startOf)
+      pose = relativePose(parent, combined(pathKeys(match.key), their))
+    } else if (!key.includes(PART_SEP)) {
+      pose = alignedInput(project, ours, theirs, key, startOf, their)
     }
     if (pose) poses[key] = pose
   }
   return poses
-}
-
-function samePose(a: Pose, b: Pose): boolean {
-  const eps = 1e-4
-  return (['pos', 'rot'] as const).every((k) =>
-    (['x', 'y', 'z'] as const).every((axis) => Math.abs(a[k][axis] - b[k][axis]) < eps),
-  )
 }
 
 /** How many of `poses` would actually move their piece from where it
@@ -232,6 +233,79 @@ export function movedBy(project: Project, stageId: string, poses: Record<string,
     const now = startPoseOf(project, stageId, key)
     return !now || !samePose(now, pose)
   }).length
+}
+
+/** Makes animation `stageId` hold `poses` as where those pieces start.
+ *  Mutates the project (an immer draft in the store). A pose that is just
+ *  where the assembly has the piece is not held at all, so the piece keeps
+ *  following its assembly. Without `overwrite`, a piece the animation
+ *  already holds a start pose for keeps it. */
+export function holdStartPoses(
+  project: Project,
+  stageId: string,
+  poses: Record<string, Pose>,
+  overwrite: boolean,
+): void {
+  const stage = project.stages[stageId]
+  if (!stage) return
+  for (const [key, pose] of Object.entries(poses)) {
+    if (!overwrite && key in stage.startPoses) continue
+    const rest = restPoseOf(project, stageId, key) ?? IDENTITY
+    if (samePose(pose, rest)) delete stage.startPoses[key]
+    else stage.startPoses[key] = { pos: { ...pose.pos }, rot: { ...pose.rot } }
+  }
+}
+
+// ---------- the chain ----------
+
+/** Whether an animation says anything about where pieces are: a track
+ *  (even one that only sets where its piece starts) or a held start pose. */
+function saysSomething(project: Project, stageId: string): boolean {
+  const stage = project.stages[stageId]
+  return (
+    stage?.kind === 'animation' &&
+    (stage.tracks.some((t) => t.targetKind === 'mesh') || Object.keys(stage.startPoses).length > 0)
+  )
+}
+
+/** The last animation before `stageId` in its chain of assemblies: the
+ *  animation of the nearest assembly feeding the ones this animation
+ *  plays that says anything — its own assembly's inputs first, then
+ *  theirs, and so on back. Null at the start of a chain. */
+export function previousAnimation(project: Project, stageId: string): string | null {
+  const feeding = (id: string) =>
+    project.board.edges
+      .filter((e) => e.to === id)
+      .map((e) => e.from)
+      .filter((from) => project.board.nodes.find((n) => n.id === from)?.kind === 'assembly')
+  const seen = new Set<string>()
+  let level = feeding(stageId)
+  while (level.length) {
+    const next: string[] = []
+    for (const asm of level) {
+      for (const earlier of feeding(asm)) {
+        if (seen.has(earlier)) continue
+        seen.add(earlier)
+        const animation = project.board.edges.find(
+          (e) => e.from === earlier && e.to !== stageId && saysSomething(project, e.to),
+        )
+        if (animation) return animation.to
+        next.push(earlier)
+      }
+    }
+    level = next
+  }
+  return null
+}
+
+/** Has animation `stageId` take up where the last animation before it in
+ *  the chain left off: its pieces start where that one ends. `only` keeps
+ *  it to one piece and what is inside it. Never replaces a start pose the
+ *  animation already holds. Mutates the project (an immer draft). */
+export function recoverFromChain(project: Project, stageId: string, only: string | null): void {
+  const previous = previousAnimation(project, stageId)
+  if (!previous) return
+  holdStartPoses(project, stageId, importedPoses(project, stageId, previous, 'end', only), false)
 }
 
 export interface PoseSource {

@@ -14,7 +14,15 @@ import type { Object3D } from 'three'
 
 import { isFreePart, linkedBodies } from '@/lib/assembly'
 import { evalStageIn, stagePieces } from '@/lib/chain'
-import { assemblyParts, membersOf, parentKey, PART_SEP, partLocalPose } from '@/lib/graph'
+import { ANIM_CAMERA_KEY } from '@/lib/constants'
+import {
+  assemblyParts,
+  lockedKey,
+  membersOf,
+  parentKey,
+  PART_SEP,
+  partLocalPose,
+} from '@/lib/graph'
 import { stageDuration } from '@/lib/timeline'
 import { aspectOf } from '@/lib/videoFormat'
 import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
@@ -37,7 +45,13 @@ function onPick(hit: PickHit | null): void {
     state.pickPoint(hit)
     return
   }
-  state.selectWorldObject(hit.nodeId)
+  // animating: a locked assembly is picked as one thing, whatever piece of
+  // it was clicked (assembly stages already pick whole inputs)
+  state.selectWorldObject(
+    state.wmode === 'animate' && hit.nodeId !== ANIM_CAMERA_KEY
+      ? lockedKey(hit.nodeId, state.asmOpen)
+      : hit.nodeId,
+  )
 }
 
 /** Gizmo drags only move the live object. Assembly writes the result back
@@ -66,7 +80,6 @@ export function applyStageAt(
   }
   return evald.camera
 }
-
 
 /** Shows the open animation stage at time `t`: its pieces, and the
  *  animation camera — an object in the world of its own, never the
@@ -123,7 +136,6 @@ function onFrame(rawDt: number): void {
     else animClock = null
   }
 }
-
 
 /** Animate playback's own clock while playing. The render loop is the
  *  source of truth; the store's playT only mirrors it for the UI (and is

@@ -4,7 +4,7 @@ import { edgeFor, keyRefersTo } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
 
-import { chainStartPoses } from '@/lib/chain'
+import { recoverFromChain } from '@/lib/chain'
 import { clamp, uid } from '@/lib/utils'
 import { ensureStage, findProject } from './helpers'
 import type { BoardActions, BoardState, Get, Set } from './types'
@@ -31,12 +31,8 @@ export const initialBoardState: BoardState = {
 function takeChainStartPoses(project: Draft<Project>, fromId: string, toId: string): void {
   const kindOf = (id: string) => project.board.nodes.find((n) => n.id === id)?.kind
   if (kindOf(fromId) !== 'assembly' || kindOf(toId) !== 'animation') return
-  const stage = ensureStage(project, toId, 'animation')
-  for (const [key, pose] of Object.entries(chainStartPoses(project, fromId))) {
-    if (!(key in stage.startPoses)) {
-      stage.startPoses[key] = { pos: { ...pose.pos }, rot: { ...pose.rot } }
-    }
-  }
+  ensureStage(project, toId, 'animation')
+  recoverFromChain(project, toId, fromId)
 }
 
 function nodeBox(kind: NodeKind, x: number, y: number) {

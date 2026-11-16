@@ -3,7 +3,7 @@
 // plus the timeline's own UI state (playhead, zoom, snapping, selection).
 // Every committed edit is undoable through the shared history slice.
 import { cameraSources, DEFAULT_CAMERA_NAME } from '@/lib/cameras'
-import { effectiveTrack, importedPoses } from '@/lib/chain'
+import { effectiveTrack, holdStartPoses, importedPoses, recoverFromChain } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { inputLabel, PART_SEP, partForKey, restPoseOf } from '@/lib/graph'
 import { normalizeAction, normalizeTrack } from '@/lib/migrations'
@@ -113,6 +113,9 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         const open = openStage(state)
         if (!open) return
         const { project, stage } = open
+        // putting a piece (or a whole assembly) on the timeline is where it
+        // takes up from the animation before this one in the chain
+        if (state.aid) recoverFromChain(project, state.aid, nodeId)
         // a mesh inside an assembly input: its track moves it within the
         // assembly, starting from where the assembly placed it
         const part = partForKey(project, nodeId)
@@ -202,11 +205,15 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
       set((state) => {
         const stage = openStage(state)?.stage
         if (!stage) return
-        // back to "as assembled" first, for the pieces this is about
-        for (const key of Object.keys(stage.startPoses)) {
-          if (inScope(key) && (!fromStageId || key in poses)) delete stage.startPoses[key]
+        const open = openStage(state)
+        if (!open || !state.aid) return
+        if (fromStageId) holdStartPoses(open.project, state.aid, poses, true)
+        else {
+          // back to "as assembled" for the pieces this is about
+          for (const key of Object.keys(stage.startPoses)) {
+            if (inScope(key)) delete stage.startPoses[key]
+          }
         }
-        for (const [key, pose] of Object.entries(poses)) stage.startPoses[key] = clonePose(pose)
         // their tracks start there too, whatever pose they had been given
         const touched = fromStageId ? (key: string) => key in poses : inScope
         for (const track of stage.tracks) {

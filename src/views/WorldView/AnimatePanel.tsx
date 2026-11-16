@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { Button } from '@/components/Button'
 import {
   CameraTrackIcon,
-  ChevronRightIcon,
   EyeIcon,
   ImportIcon,
+  LockIcon,
+  LockOpenIcon,
   OpacityIcon,
   PlusIcon,
   RecordIcon,
@@ -16,7 +17,7 @@ import { NameField } from '@/components/NameField'
 import { recordCameraFromView } from '@/hooks/useShortcuts'
 import { cameraSources } from '@/lib/cameras'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
-import { assemblyParts, membersOf, type AssemblyPart } from '@/lib/graph'
+import { assemblyParts, lockedKey, membersOf, type AssemblyPart } from '@/lib/graph'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import type { PartLook, Project, Stage } from '@/types/project'
@@ -89,6 +90,29 @@ function OpacitySlider({ value, onChange }: { value: number; onChange: (v: numbe
 
 /** A piece inside an assembly input — selectable, animatable (its track
  *  moves it within the assembly), and shown / faded on its own. */
+/** The lock of an assembly in the scene tree. Locked (the default), it is
+ *  handled as one thing: a click on any of its pieces picks the assembly.
+ *  Unlocked, its pieces are listed and can be picked and animated one by
+ *  one — each assembly inside it with a lock of its own. */
+function AsmLock({ assemblyKey }: { assemblyKey: string }) {
+  const open = useStore((s) => s.asmOpen.includes(assemblyKey))
+  const toggleAsmOpen = useStore((s) => s.toggleAsmOpen)
+  return (
+    <IconButton
+      title={
+        open
+          ? 'Unlocked — its pieces can be picked and animated. Click to lock'
+          : 'Locked — moves as one. Click to reach its pieces'
+      }
+      aria-expanded={open}
+      active={open}
+      onClick={() => toggleAsmOpen(assemblyKey)}
+    >
+      {open ? <LockOpenIcon size={13} /> : <LockIcon size={13} />}
+    </IconButton>
+  )
+}
+
 function PartRow({
   part,
   look,
@@ -126,6 +150,11 @@ function PartRow({
         title={name}
         style={{ paddingLeft: 4 + part.depth * 16, opacity: visible ? 1 : 0.5 }}
       >
+        {part.mesh ? (
+          <span style={{ width: 20, flex: 'none' }} />
+        ) : (
+          <AsmLock assemblyKey={part.key} />
+        )}
         <TrackButton tracked={tracked} onCreate={onCreate} onOpen={onOpen} />
         {part.node.color && (
           <span
@@ -305,15 +334,8 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
   const selectAction = useStore((s) => s.selectAction)
   const addMeshTrack = useStore((s) => s.addMeshTrack)
   const removeMember = useStore((s) => s.removeMember)
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const asmOpen = useStore((s) => s.asmOpen)
   const [importingPoses, setImportingPoses] = useState(false)
-
-  const toggle = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
   const trackOf = (key: string) => stage.tracks.find((t) => t.nodeId === key)
   const openTrack = (key: string) => {
     const t = trackOf(key)
@@ -355,7 +377,7 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
         )}
         <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5, marginTop: 4 }}>
           Click a piece (here or in the viewport), move it with the gizmo, then <b>Record pose</b>{' '}
-          (K). Esc selects the assembly holding it.
+          (K). An assembly moves as one until you open its lock; then its pieces can be picked.
         </div>
       </div>
 
@@ -376,7 +398,6 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
           if (!member) return null
           const key = row.node.id
           const isAsm = !row.mesh
-          const open = isAsm && !collapsed.has(key)
           return (
             <div key={key}>
               <MemberRow
@@ -388,15 +409,7 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
                 leading={
                   <>
                     {isAsm ? (
-                      <IconButton
-                        title={open ? 'Collapse' : 'Show its pieces'}
-                        onClick={() => toggle(key)}
-                      >
-                        <ChevronRightIcon
-                          size={11}
-                          style={{ transform: open ? 'rotate(90deg)' : undefined }}
-                        />
-                      </IconButton>
+                      <AsmLock assemblyKey={key} />
                     ) : (
                       <span style={{ width: 20, flex: 'none' }} />
                     )}
@@ -408,19 +421,22 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
                   </>
                 }
               />
-              {open &&
-                assemblyParts(project, key).map((part) => (
-                  <PartRow
-                    key={part.key}
-                    part={part}
-                    look={stage.partLooks?.[part.key]}
-                    selected={worldSelId === part.key}
-                    tracked={!!trackOf(part.key)}
-                    onSelect={() => selectWorldObject(part.key)}
-                    onCreate={() => addMeshTrack(part.key)}
-                    onOpen={() => openTrack(part.key)}
-                  />
-                ))}
+              {isAsm &&
+                assemblyParts(project, key)
+                  // listed once every assembly holding it is unlocked
+                  .filter((part) => lockedKey(part.key, asmOpen) === part.key)
+                  .map((part) => (
+                    <PartRow
+                      key={part.key}
+                      part={part}
+                      look={stage.partLooks?.[part.key]}
+                      selected={worldSelId === part.key}
+                      tracked={!!trackOf(part.key)}
+                      onSelect={() => selectWorldObject(part.key)}
+                      onCreate={() => addMeshTrack(part.key)}
+                      onOpen={() => openTrack(part.key)}
+                    />
+                  ))}
             </div>
           )
         })}

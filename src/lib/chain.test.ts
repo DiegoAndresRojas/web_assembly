@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  chainStartPoses,
   effectiveTrack,
   evalStageIn,
   importedPoses,
   movedBy,
   poseSources,
+  previousAnimation,
+  recoverFromChain,
   stagePieces,
   startPoseOf,
 } from './chain'
@@ -106,18 +107,44 @@ describe('startPoseOf', () => {
   })
 })
 
-describe('chainStartPoses — taken when an assembly is first wired in', () => {
-  it('is empty when no earlier animation moved anything', () => {
-    expect(chainStartPoses(chain(), 'asm2')).toEqual({})
+/** A track that only says where its piece starts: no actions at all. */
+const placed = (nodeId: string, atX: number) =>
+  track(nodeId, [], { initPose: pose(atX), initLinked: false })
+
+describe('recoverFromChain — taking up from the animation before', () => {
+  const held = (p: Project, stageId = 'anim2') => p.stages[stageId].startPoses
+
+  it('finds the animation of the assembly feeding this one', () => {
+    expect(previousAnimation(animated(), 'anim2')).toBe('anim1')
+    // the first of a chain has nothing before it
+    expect(previousAnimation(animated(), 'anim1')).toBeNull()
+    // an animation that says nothing about any piece does not count
+    expect(previousAnimation(chain(), 'anim2')).toBeNull()
   })
 
-  it('takes a piece mounted earlier from where the last animation left it', () => {
-    const poses = chainStartPoses(animated(), 'asm2')
-    expect(Object.keys(poses)).toEqual([INNER])
-    expect(x(poses[INNER])).toBeCloseTo(7)
+  it('starts a piece mounted earlier where the last animation left it', () => {
+    const p = animated()
+    recoverFromChain(p, 'anim2', null)
+    expect(Object.keys(held(p))).toEqual([INNER])
+    expect(x(held(p)[INNER])).toBeCloseTo(7)
   })
 
-  it('follows a previous animation that flies the piece back into place', () => {
+  it('counts an animation that only set where a piece starts', () => {
+    const p = chain({ anim1: { kind: 'animation', tracks: [placed('asm1/piece1', 7)] } })
+    recoverFromChain(p, 'anim2', null)
+    expect(x(held(p)[INNER])).toBeCloseTo(7)
+  })
+
+  it('puts the whole assembly where the earlier one was shown', () => {
+    // anim1 only placed its assembly at x = 50; asm2 holds asm1 at x = 10
+    const p = chain({ anim1: { kind: 'animation', tracks: [placed('asm1', 50)] } })
+    recoverFromChain(p, 'anim2', 'asm2')
+    // so asm2 goes to 40: asm1 ends up at 50 in the world, as before
+    expect(x(held(p)['asm2'])).toBeCloseTo(40)
+    expect(held(p)['asm2/asm1']).toBeUndefined()
+  })
+
+  it('holds nothing for a piece the earlier animation leaves as assembled', () => {
     const p = chain({
       anim1: {
         kind: 'animation',
@@ -129,22 +156,87 @@ describe('chainStartPoses — taken when an assembly is first wired in', () => {
         ],
       },
     })
-    expect(x(chainStartPoses(p, 'asm2')[INNER])).toBeCloseTo(1)
+    recoverFromChain(p, 'anim2', null)
+    expect(held(p)).toEqual({})
   })
 
-  it('ignores an animation that moves nothing', () => {
-    const p = chain({ anim1: { kind: 'animation', tracks: [track('asm1/piece1', [])] } })
-    expect(chainStartPoses(p, 'asm2')).toEqual({})
+  it('never replaces a start pose the animation already holds', () => {
+    const p = animated({ anim2: { kind: 'animation', startPoses: { [INNER]: pose(-3) } } })
+    recoverFromChain(p, 'anim2', null)
+    expect(x(held(p)[INNER])).toBeCloseTo(-3)
+  })
+
+  it('can be kept to the piece being put on the timeline', () => {
+    const p = animated()
+    recoverFromChain(p, 'anim2', 'asm2/piece2')
+    expect(held(p)).toEqual({})
+    recoverFromChain(p, 'anim2', 'asm2/asm1')
+    expect(Object.keys(held(p))).toEqual([INNER])
   })
 
   it('lets the later assembly win where it re-placed the piece itself', () => {
     const p = animated()
     p.stages.asm2.partOverrides['asm1/piece1'] = { free: false, pose: pose(3) }
-    expect(chainStartPoses(p, 'asm2')).toEqual({})
+    recoverFromChain(p, 'anim2', null)
+    expect(held(p)).toEqual({})
   })
 
-  it('has nothing to say about the pieces of the first assembly', () => {
-    expect(chainStartPoses(animated(), 'asm1')).toEqual({})
+  describe('three stages deep', () => {
+    /** piece1 → asm1 → asm2 → asm3, an animation on each. asm2 holds asm1
+     *  at x = 10, asm3 holds asm2 at x = 100. */
+    const chain3 = (stages: Record<string, unknown>) =>
+      normalizeProject({
+        meshes: [{ id: 'file', name: 'part.stl', ext: 'stl' }],
+        board: {
+          nodes: [
+            { id: 'piece1', kind: 'mesh', meshId: 'file' },
+            ...['asm1', 'asm2', 'asm3'].map((id) => ({ id, kind: 'assembly' })),
+            ...['anim1', 'anim2', 'anim3'].map((id) => ({ id, kind: 'animation' })),
+          ],
+          edges: [
+            { from: 'piece1', to: 'asm1' },
+            { from: 'asm1', to: 'asm2' },
+            { from: 'asm2', to: 'asm3' },
+            { from: 'asm1', to: 'anim1' },
+            { from: 'asm2', to: 'anim2' },
+            { from: 'asm3', to: 'anim3' },
+          ],
+        },
+        stages: {
+          asm1: { kind: 'assembly', members: [{ nodeId: 'piece1', pose: pose(1) }] },
+          asm2: { kind: 'assembly', members: [{ nodeId: 'asm1', pose: pose(10) }] },
+          asm3: { kind: 'assembly', members: [{ nodeId: 'asm2', pose: pose(100) }] },
+          anim1: { kind: 'animation', tracks: [placed('asm1', 50)] },
+          anim2: { kind: 'animation' },
+          anim3: { kind: 'animation' },
+          ...stages,
+        },
+      })!
+
+    it('takes up from the nearest animation, not the one two stages back', () => {
+      const p = chain3({ anim2: { kind: 'animation', tracks: [placed('asm2', 200)] } })
+      expect(previousAnimation(p, 'anim3')).toBe('anim2')
+      recoverFromChain(p, 'anim3', null)
+      // asm2 at 200 in the world, held at 100 inside asm3 → asm3 at 100
+      expect(x(p.stages.anim3.startPoses['asm3'])).toBeCloseTo(100)
+    })
+
+    it('reaches further back when the stage in between says nothing', () => {
+      const p = chain3({})
+      expect(previousAnimation(p, 'anim3')).toBe('anim1')
+      recoverFromChain(p, 'anim3', null)
+      // asm1 at 50 in the world, held at 100 + 10 inside asm3 → asm3 at −60
+      expect(x(p.stages.anim3.startPoses['asm3'])).toBeCloseTo(-60)
+    })
+
+    it('passes a position down the chain one animation at a time', () => {
+      const p = chain3({})
+      recoverFromChain(p, 'anim2', null) // asm2 at 40, from anim1
+      expect(x(p.stages.anim2.startPoses['asm2'])).toBeCloseTo(40)
+      recoverFromChain(p, 'anim3', null) // anim2 now says something
+      expect(previousAnimation(p, 'anim3')).toBe('anim2')
+      expect(x(p.stages.anim3.startPoses['asm3'])).toBeCloseTo(-60)
+    })
   })
 })
 

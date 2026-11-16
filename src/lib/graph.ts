@@ -148,6 +148,19 @@ export function parentKey(key: string): string | null {
   return i < 0 ? null : key.slice(0, i)
 }
 
+/** What a click on piece `key` selects, given which assemblies are
+ *  unlocked (`open`, by key): the outermost assembly on the way down to it
+ *  that is still locked — a locked assembly is handled as one thing — or
+ *  the piece itself when every assembly holding it is unlocked. */
+export function lockedKey(key: string, open: readonly string[]): string {
+  const segs = key.split(PART_SEP)
+  for (let i = 1; i < segs.length; i++) {
+    const holder = segs.slice(0, i).join(PART_SEP)
+    if (!open.includes(holder)) return holder
+  }
+  return key
+}
+
 /** The part a key addresses, or null for a plain (top-level) node id. */
 export function partForKey(project: Project | null, key: string): AssemblyPart | null {
   const top = key.split(PART_SEP)[0]
