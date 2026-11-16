@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { Button } from '@/components/Button'
+import { FoldHeader, useFold } from '@/components/Fold'
 import {
   CameraTrackIcon,
   EyeIcon,
@@ -338,6 +339,8 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
   const removeMember = useStore((s) => s.removeMember)
   const asmOpen = useStore((s) => s.asmOpen)
   const [importingPoses, setImportingPoses] = useState(false)
+  const [sceneOpen, toggleScene] = useFold('animate.scene')
+  const inputs = membersOf(project, stageId)
   const trackOf = (key: string) => stage.tracks.find((t) => t.nodeId === key)
   const openTrack = (key: string) => {
     const t = trackOf(key)
@@ -356,19 +359,15 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
       }}
     >
       <div style={{ flex: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <div className="tl-section-title" style={{ flex: 1 }}>
-            Scene
-          </div>
-          <Button
-            variant="ghost"
-            title="Start the pieces where another animation has them"
+        <FoldHeader title="Scene" note={inputs.length} open={sceneOpen} onToggle={toggleScene}>
+          <IconButton
+            title="Import positions — start the pieces where another animation has them"
+            aria-label="Import positions from another animation"
             onClick={() => setImportingPoses(true)}
-            style={{ height: 22, minHeight: 22, padding: '0 7px', fontSize: 10, gap: 4 }}
           >
-            <ImportIcon size={11} /> Import positions
-          </Button>
-        </div>
+            <ImportIcon size={13} />
+          </IconButton>
+        </FoldHeader>
         {importingPoses && (
           <ImportPosesDialog
             project={project}
@@ -381,25 +380,21 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
             onClose={() => setImportingPoses(false)}
           />
         )}
-        <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5, marginTop: 4 }}>
-          Click a piece (here or in the viewport), move it with the gizmo, then <b>Record pose</b>{' '}
-          (K). An assembly moves as one until you open its lock; then its pieces can be picked.
-        </div>
       </div>
 
       <div
         style={{
-          flex: 1,
-          minHeight: 0,
+          flex: sceneOpen ? '1 1 0' : 'none',
+          minHeight: sceneOpen ? 56 : 0,
           overflow: 'auto',
-          display: 'flex',
+          display: sceneOpen ? 'flex' : 'none',
           flexDirection: 'column',
           gap: 1,
         }}
       >
         <CameraRow project={project} stageId={stageId} stage={stage} session={session} />
 
-        {membersOf(project, stageId).map((row) => {
+        {inputs.map((row) => {
           const member = stage.members.find((m) => m.nodeId === row.node.id)
           if (!member) return null
           const key = row.node.id

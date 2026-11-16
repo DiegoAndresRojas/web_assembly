@@ -32,14 +32,13 @@ function hintFor(
   if (wmode === 'assembly') {
     if (kpOn) {
       return pendingPicks > 0
-        ? 'Point 1 selected — click a point on a different mesh to link them.'
-        : 'Click a point on a mesh to start a keypoint link.'
+        ? 'Point 1 set · click a point on another mesh'
+        : 'Click a point on a mesh'
     }
-    return 'Drag to orbit. Click a mesh, then check Select keypoints to link two points.'
+    return 'Drag to orbit · click a mesh to select'
   }
-  if (lookingThrough)
-    return 'Previewing through the animation camera — scrub or play to see the shot.'
-  return 'Click to select — a locked assembly is picked whole; open its lock to reach its pieces. Move it, then Record pose (K).'
+  if (lookingThrough) return ''
+  return 'Click to select · K records the pose'
 }
 
 export function WorldViewport({ stageId, onSession }: WorldViewportProps) {

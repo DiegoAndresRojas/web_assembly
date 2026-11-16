@@ -40,7 +40,9 @@ export function MemberRow({
   return (
     <div>
       <div
-        className={onSelect ? 'outline-row' + (selected ? ' outline-row--selected' : '') : undefined}
+        className={
+          onSelect ? 'outline-row' + (selected ? ' outline-row--selected' : '') : undefined
+        }
         draggable={draggable}
         onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', member.nodeId)}
         onClick={(e) => {

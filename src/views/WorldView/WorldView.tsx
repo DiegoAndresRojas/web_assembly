@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 
 import { BackIcon } from '@/components/icons'
+import { IconButton } from '@/components/IconButton'
 import { NameField } from '@/components/NameField'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import { stageName } from '@/lib/cameras'
@@ -40,31 +41,35 @@ export function WorldView({ stageId }: { stageId: string }) {
             flex: 'none',
             display: 'flex',
             flexDirection: 'column',
-            gap: 'var(--space-4)',
-            padding: 'var(--space-4)',
+            gap: 'var(--space-3)',
+            padding: 'var(--space-3)',
             background: 'var(--color-surface)',
             boxShadow: 'var(--shadow-sm)',
             overflow: 'auto',
           }}
         >
-          <button
-            className="btn btn-ghost"
-            style={{ flex: 'none', alignSelf: 'flex-start' }}
-            onClick={backToBoard}
-          >
-            <BackIcon size={15} /> Back to board
-          </button>
           <div
-            style={{
-              flex: 'none',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 6,
-              fontSize: 11,
-              marginTop: 'calc(-1 * var(--space-2))',
-            }}
+            style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}
           >
-            <span className="text-muted" style={{ flex: 'none' }}>
+            <IconButton
+              size="md"
+              title="Back to board"
+              aria-label="Back to board"
+              onClick={backToBoard}
+            >
+              <BackIcon size={15} />
+            </IconButton>
+            <span
+              className="text-muted"
+              title={project.name}
+              style={{
+                flex: '0 1 auto',
+                minWidth: 0,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
               {project.name} /
             </span>
             <NameField

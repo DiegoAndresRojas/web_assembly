@@ -1,11 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/Button'
+import { FoldHeader, useFold } from '@/components/Fold'
 import {
   DuplicateIcon,
   EyeIcon,
   ImportIcon,
-  LightIcon,
   PlusIcon,
   RecordIcon,
   TrashIcon,
@@ -147,23 +147,25 @@ function ColorField({
 }
 
 function Block({
+  id,
   title,
+  note,
   aside,
   children,
 }: {
+  id: string
   title: string
+  note?: string
   aside?: ReactNode
   children?: ReactNode
 }) {
+  const [open, toggle] = useFold(id)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="tl-section-title" style={{ flex: 1 }}>
-          {title}
-        </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <FoldHeader title={title} note={note} open={open} onToggle={toggle}>
         {aside}
-      </div>
-      {children}
+      </FoldHeader>
+      {open && children}
     </div>
   )
 }
@@ -354,8 +356,12 @@ function LightProps({
       )}
       {isPosed(light.kind) &&
         (tracked ? (
-          <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5 }}>
-            On the timeline: move it with the gizmo and press <b>K</b> to record where it goes.
+          <div
+            className="text-muted"
+            style={{ fontSize: 10 }}
+            title="It is on the timeline: move it with the gizmo and press K to record where it goes"
+          >
+            Placed by its track (K records)
           </div>
         ) : (
           <>
@@ -384,6 +390,7 @@ function EnvironmentBlock({ stage }: { stage: Stage }) {
   const env = stage.environment
   return (
     <Block
+      id="animate.environment"
       title="Environment"
       aside={
         <select
@@ -446,7 +453,9 @@ function FloorBlock({ stage, session }: { stage: Stage; session: WorldSession | 
 
   return (
     <Block
+      id="animate.floor"
       title="Floor"
+      note={floor ? (floor.mode === 'shadow' ? 'shadows' : 'solid') : ''}
       aside={
         floor ? (
           <>
@@ -522,7 +531,7 @@ function FloorBlock({ stage, session }: { stage: Stage; session: WorldSession | 
           </div>
           {!shadowsOn && (
             <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5 }}>
-              No light casts shadows yet: add a light and turn on <b>Casts shadows</b>.
+              No light casts shadows yet.
             </div>
           )}
         </>
@@ -547,6 +556,7 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
   const clearLights = useStore((s) => s.clearLights)
   const importLights = useStore((s) => s.importLights)
   const [importing, setImporting] = useState(false)
+  const [open, toggle] = useFold('animate.lights')
   const bounds = () => session?.sceneBounds() ?? DEFAULT_BOUNDS
   const sources = lightSources(project, stageId)
   const selected = lightForKey(stage, worldSelId)
@@ -555,7 +565,7 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
     <div
       style={{
         flex: 'none',
-        maxHeight: '58%',
+        maxHeight: '62%',
         overflow: 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -564,22 +574,23 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
         borderTop: '1px solid var(--color-neutral-800)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <LightIcon size={12} style={{ color: 'var(--color-neutral-400)' }} />
-        <span className="tl-section-title" style={{ flex: 1 }}>
-          Lights
-        </span>
+      <FoldHeader
+        title="Lights"
+        note={stage.lights.length || 'default'}
+        open={open}
+        onToggle={toggle}
+      >
         <select
           className="input"
           aria-label="Add a light"
           title="Add a light around the pieces"
           value=""
-          style={{ ...menuStyle, width: 62 }}
+          style={{ ...menuStyle, width: 38 }}
           onChange={(e) => {
             if (e.target.value) addLight(e.target.value as LightKind, bounds())
           }}
         >
-          <option value="">+ Add</option>
+          <option value="">+</option>
           {LIGHT_KINDS.map((kind) => (
             <option key={kind} value={kind} title={LIGHT_KIND_HINT[kind]}>
               {LIGHT_KIND_LABEL[kind]}
@@ -614,7 +625,7 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
             <ImportIcon size={13} />
           </IconButton>
         )}
-      </div>
+      </FoldHeader>
       {importing && (
         <ImportLightsDialog
           sources={sources}
@@ -623,27 +634,18 @@ export function LightsPanel({ project, stageId, stage, session }: LightsPanelPro
         />
       )}
 
-      {stage.lights.length === 0 && (
-        <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5 }}>
-          No lights of its own: lit the default way. Add a light or pick a preset
-          {sources.length > 0 && (
-            <>
-              , or{' '}
-              <button
-                className="link-button"
-                onClick={() => importLights(sources[0].stageId, 'replace')}
-              >
-                light it like {sources[0].stageName}
-              </button>
-            </>
-          )}
-          .
-        </div>
+      {open && stage.lights.length === 0 && sources.length > 0 && (
+        <button
+          className="link-button"
+          title="Take the lighting of the animation before this one in the chain"
+          onClick={() => importLights(sources[0].stageId, 'replace')}
+          style={{ alignSelf: 'flex-start', fontSize: 10 }}
+        >
+          Light it like {sources[0].stageName}
+        </button>
       )}
-      {stage.lights.map((light) => (
-        <LightRow key={light.id} stage={stage} light={light} />
-      ))}
-      {selected && <LightProps stage={stage} light={selected} session={session} />}
+      {open && stage.lights.map((light) => <LightRow key={light.id} stage={stage} light={light} />)}
+      {open && selected && <LightProps stage={stage} light={selected} session={session} />}
 
       <EnvironmentBlock stage={stage} />
       <FloorBlock stage={stage} session={session} />

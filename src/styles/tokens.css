@@ -615,3 +615,36 @@ a:hover {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* a panel section's header: click the title to fold the section away */
+.fold-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  flex: none;
+}
+.fold-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  text-align: left;
+}
+.fold-toggle:hover .tl-section-title {
+  color: var(--color-neutral-300);
+}
+.fold-note {
+  min-width: 0;
+  font-size: 10px;
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -217,8 +217,7 @@ export function TimelineDock({ project, stageId, stage, session }: TimelineDockP
                   lineHeight: 1.6,
                 }}
               >
-                No tracks yet. Select a piece in the viewport or the scene list, move it with the
-                gizmo and press <b>K</b> (Record pose) — or use <b>+</b> next to it in the scene
+                No tracks yet — move a piece and press <b>K</b>, or use its <b>+</b> in the scene
                 list.
               </div>
             )}
