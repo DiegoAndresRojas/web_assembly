@@ -13,15 +13,9 @@ import { useEffect, useState } from 'react'
 import type { Object3D } from 'three'
 
 import { isFreePart, linkedBodies } from '@/lib/assembly'
-import {
-  assemblyParts,
-  membersOf,
-  parentKey,
-  PART_SEP,
-  partLocalPose,
-  restPoseOf,
-} from '@/lib/graph'
-import { evalStage, stageDuration } from '@/lib/timeline'
+import { evalStageIn, stagePieces } from '@/lib/chain'
+import { assemblyParts, membersOf, parentKey, PART_SEP, partLocalPose } from '@/lib/graph'
+import { stageDuration } from '@/lib/timeline'
 import { aspectOf } from '@/lib/videoFormat'
 import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
 import { buildInput } from '@/lib/three/stageInput'
@@ -54,51 +48,23 @@ function onObjectMoved(nodeId: string, pose: Pose): void {
   if (state.wmode === 'assembly') state.setMemberPose(nodeId, pose)
 }
 
-/** Every piece of a stage's scene (key + connector pose): its inputs and,
- *  for assembly inputs, every part inside them. */
-export function stagePieces(project: Project, stageId: string): Array<{ key: string; rest: Pose }> {
-  return membersOf(project, stageId).flatMap((row) => {
-    // a stage never opened has no member records yet: default pose
-    const self = { key: row.node.id, rest: memberOr(stageId, project, row.node.id).pose }
-    if (row.mesh) return [self]
-    return [self, ...assemblyParts(project, row.node.id).map((p) => ({ key: p.key, rest: p.pose }))]
-  })
-}
-
 /** Poses every piece of `stageId` for time `t`: tracked pieces where their
- *  actions put them, the rest at their connector pose. Returns the animation
- *  camera's pose at `t`, if the stage animates one — callers decide
- *  whether the viewport camera follows it. */
+ *  actions put them, the rest where they start (see lib/chain.ts). Returns
+ *  the animation camera's pose at `t`, if the stage animates one — callers
+ *  decide whether the viewport camera follows it. */
 export function applyStageAt(
   session: WorldSession,
   project: Project,
   stageId: string,
   t: number,
 ): Pose | null {
-  const stage = project.stages[stageId]
-  if (!stage) return null
-  const evald = evalStage(stage, t, (key) => restPoseOf(project, stageId, key))
-  for (const { key, rest } of stagePieces(project, stageId)) {
+  if (!project.stages[stageId]) return null
+  const evald = evalStageIn(project, stageId, t)
+  for (const { key, start } of stagePieces(project, stageId)) {
     const obj = session.getObject(key)
-    if (obj) applyPose(obj, evald.meshes[key] ?? rest)
+    if (obj) applyPose(obj, evald.meshes[key] ?? start)
   }
   return evald.camera
-}
-
-const IDENTITY_POSE: Pose = { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } }
-
-/** A member record for an input, or defaults when the stage holding it
- *  was never opened (being wired in is all it takes to be shown). */
-function memberOr(stageId: string, project: Project, nodeId: string): StageMember {
-  return (
-    project.stages[stageId]?.members.find((m) => m.nodeId === nodeId) ?? {
-      nodeId,
-      visible: true,
-      opacity: 1,
-      pose: IDENTITY_POSE,
-      color: null,
-    }
-  )
 }
 
 

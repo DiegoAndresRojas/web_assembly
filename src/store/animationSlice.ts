@@ -2,6 +2,7 @@
 // input, a part inside one, or the camera) holding chained move actions,
 // plus the timeline's own UI state (playhead, zoom, snapping, selection).
 // Every committed edit is undoable through the shared history slice.
+import { effectiveTrack } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { inputLabel, partForKey, restPoseOf } from '@/lib/graph'
 import { normalizeAction, normalizeTrack } from '@/lib/migrations'
@@ -115,7 +116,9 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         // assembly, starting from where the assembly placed it
         const part = partForKey(project, nodeId)
         if (part) {
-          stage.tracks.push(normalizeTrack({ targetKind: 'mesh', nodeId, initPose: part.pose })!)
+          stage.tracks.push(
+            normalizeTrack({ targetKind: 'mesh', nodeId, initPose: part.pose, initLinked: true })!,
+          )
           return
         }
         if (!stage.members.some((m) => m.nodeId === nodeId)) {
@@ -128,7 +131,14 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
           })
         }
         const member = stage.members.find((m) => m.nodeId === nodeId)!
-        stage.tracks.push(normalizeTrack({ targetKind: 'mesh', nodeId, initPose: member.pose })!)
+        stage.tracks.push(
+          normalizeTrack({
+            targetKind: 'mesh',
+            nodeId,
+            initPose: member.pose,
+            initLinked: true,
+          })!,
+        )
       })
     },
     addCameraTrack(currentCameraPose) {
@@ -228,7 +238,11 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
       if (!project || !aid || !track) return null
       const slot = freeSlotAt(track, t)
       if (!slot) return null
-      const from = poseAtTime(track, slot.start, trackRest(project, aid, track))
+      const from = poseAtTime(
+        effectiveTrack(project, aid, track),
+        slot.start,
+        trackRest(project, aid, track),
+      )
       const action = normalizeAction({
         start: slot.start,
         duration: slot.duration,
@@ -261,9 +275,10 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         // unlinking an end keeps it where it currently resolves to, so the
         // motion doesn't jump the moment the link is turned off
         if (patch.fromLinked === false || patch.toLinked === false) {
-          const resolved = resolveActions(track, trackRest(open.project, state.aid, track)).find(
-            (r) => r.action.id === actionId,
-          )
+          const resolved = resolveActions(
+            effectiveTrack(open.project, state.aid, track),
+            trackRest(open.project, state.aid, track),
+          ).find((r) => r.action.id === actionId)
           if (resolved && patch.fromLinked === false && action.fromLinked) {
             action.fromPose = clonePose(resolved.from)
           }
@@ -284,7 +299,22 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
     setInitPose(trackId, pose) {
       set((state) => {
         const track = openStage(state)?.stage.tracks.find((x) => x.id === trackId)
-        if (track) track.initPose = clonePose(pose)
+        if (!track) return
+        // a pose chosen by hand: the track no longer follows the piece
+        track.initPose = clonePose(pose)
+        track.initLinked = false
+      })
+    },
+    setInitLinked(trackId, linked) {
+      set((state) => {
+        const open = openStage(state)
+        const track = open?.stage.tracks.find((x) => x.id === trackId)
+        if (!open || !track || !state.aid || track.targetKind !== 'mesh') return
+        // unlinking keeps the pose it was following, so nothing jumps
+        if (!linked && track.initLinked) {
+          track.initPose = clonePose(effectiveTrack(open.project, state.aid, track).initPose)
+        }
+        track.initLinked = linked
       })
     },
 

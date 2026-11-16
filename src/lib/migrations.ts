@@ -33,9 +33,10 @@ import type {
 //    end-user player is being rebuilt as its own read-only mode.
 // 9: per-stage camera frame format (16:9 until chosen otherwise).
 // 10: pieces unlocked from assembly inputs (partOverrides).
+// 11: tracks may start where the piece already is (initLinked).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 10
+export const CURRENT_VERSION = 11
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -157,6 +158,8 @@ export function normalizeTrack(raw: unknown): Track | null {
     targetKind,
     nodeId: targetKind === 'mesh' && typeof t.nodeId === 'string' ? t.nodeId : null,
     initPose: normalizePose(t.initPose),
+    // tracks saved before this existed keep the pose they stored
+    initLinked: targetKind === 'mesh' && t.initLinked === true,
     actions,
   }
 }

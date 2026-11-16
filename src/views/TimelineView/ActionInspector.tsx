@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { CloseIcon, DuplicateIcon, TrashIcon } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
+import { effectiveTrack } from '@/lib/chain'
 import { inputLabel, restPoseOf } from '@/lib/graph'
 import { readPose } from '@/lib/three/buildMesh'
 import type { WorldSession } from '@/lib/three/worldSession'
@@ -93,6 +94,7 @@ export function ActionInspector({
   const beginEdit = useStore((s) => s.beginEdit)
   const updateAction = useStore((s) => s.updateAction)
   const setInitPose = useStore((s) => s.setInitPose)
+  const setInitLinked = useStore((s) => s.setInitLinked)
   const duplicateAction = useStore((s) => s.duplicateAction)
   const deleteAction = useStore((s) => s.deleteAction)
 
@@ -102,6 +104,8 @@ export function ActionInspector({
   const isCam = track.targetKind === 'camera'
   const key = track.nodeId
   const rest = key ? restPoseOf(project, stageId, key) : null
+  // the track as it plays: a followed start resolved to an actual pose
+  const playing = effectiveTrack(project, stageId, track)
   // where a pose can be taken from: the piece (or the camera object) as
   // the gizmo left it, or — for the camera — the view you're looking from
   const poseFrom = (source: 'object' | 'view'): Pose | null => {
@@ -172,30 +176,31 @@ export function ActionInspector({
     return (
       <div className="tl-inspector">
         {header('Initial pose — where the track starts')}
-        <Section title="Pose">
-          <PoseFields pose={track.initPose} onChange={(p) => setInitPose(track.id, p)} />
-          {poseButtons((p) => setInitPose(track.id, p))}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {rest && (
-              <Button
-                variant="ghost"
-                style={smallBtn}
-                title="Back to where the assembly's connectors put the piece"
-                onClick={() => {
+        <Section
+          title="Pose"
+          aside={
+            isCam ? undefined : (
+              <Check
+                checked={track.initLinked}
+                label="Where the piece is"
+                title="Start where the assembly put the piece, or where the last animation before this one left it — and keep following it when those change"
+                onChange={(v) => {
                   beginEdit()
-                  setInitPose(track.id, rest)
+                  setInitLinked(track.id, v)
                 }}
-              >
-                Reset to connector
-              </Button>
-            )}
-          </div>
+              />
+            )
+          }
+        >
+          {/* editing a followed pose by hand stops following it */}
+          <PoseFields pose={playing.initPose} onChange={(p) => setInitPose(track.id, p)} />
+          {poseButtons((p) => setInitPose(track.id, p))}
         </Section>
       </div>
     )
   }
 
-  const resolved = resolveActions(track, rest).find((r) => r.action.id === selection.actionId)
+  const resolved = resolveActions(playing, rest).find((r) => r.action.id === selection.actionId)
   if (!resolved) return null
   const { action, from, to } = resolved
   const patch = updateAction.bind(null, track.id, action.id)

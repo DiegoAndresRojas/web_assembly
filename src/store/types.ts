@@ -277,6 +277,9 @@ export interface AnimationActions {
   beginEdit: () => void
   /** Live edit, like updateAction (call beginEdit first). */
   setInitPose: (trackId: string, pose: Pose) => void
+  /** Whether a track starts where its piece already is (its assembly, or
+   *  the last animation earlier in the chain) rather than at a set pose. */
+  setInitLinked: (trackId: string, linked: boolean) => void
   duplicateAction: (trackId: string, actionId: string) => void
   deleteAction: (trackId: string, actionId: string) => void
   /** "Record" a pose taken from the viewport for a piece (or `'camera'`):

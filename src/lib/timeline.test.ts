@@ -26,6 +26,7 @@ const track = (actions: TimelineAction[], initPose = pose(0)): Track => ({
   targetKind: 'mesh',
   nodeId: 'n',
   initPose,
+  initLinked: false,
   actions,
 })
 

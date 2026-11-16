@@ -100,6 +100,10 @@ export interface Track {
   targetKind: TrackTargetKind
   nodeId: string | null
   initPose: Pose
+  /** Start where the piece already is — where its assembly put it, or
+   *  where the last animation earlier in the chain left it — instead of at
+   *  `initPose` (which then only records the last pose chosen by hand). */
+  initLinked: boolean
   actions: TimelineAction[]
 }
 
