@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 
 import { STORAGE_KEY } from '@/lib/constants'
@@ -8,44 +8,12 @@ import { createAnimationSlice, initialAnimationState } from './animationSlice'
 import { createAssemblySlice, initialAssemblyState } from './assemblySlice'
 import { createBoardSlice, initialBoardState } from './boardSlice'
 import { createExportSlice, initialExportState } from './exportSlice'
+import { createHistorySlice, initialHistoryState } from './historySlice'
 import { createNavigationSlice, initialNavigationState } from './navigationSlice'
+import { createProjectStorage } from './persistStorage'
 import { createProjectsSlice, initialProjectsState } from './projectsSlice'
 import type { AppState } from './types'
 import { createWorldSlice, initialWorldState } from './worldSlice'
-
-// localStorage can throw (quota exceeded — large uploaded meshes add up
-// fast as base64 — or private-browsing mode blocking storage entirely).
-// zustand's persist middleware doesn't guard against that itself, and an
-// uncaught throw there would otherwise look like "nothing saved, no
-// error" from the UI's perspective. Surface it instead of losing writes
-// silently.
-const safeStorage: StateStorage = {
-  getItem: (name) => {
-    try {
-      return window.localStorage.getItem(name)
-    } catch (e) {
-      console.error('[mesh-studio] could not read saved projects:', e)
-      return null
-    }
-  },
-  setItem: (name, value) => {
-    try {
-      window.localStorage.setItem(name, value)
-    } catch (e) {
-      console.error(
-        '[mesh-studio] could not save projects — storage may be full or unavailable (private browsing?):',
-        e,
-      )
-    }
-  },
-  removeItem: (name) => {
-    try {
-      window.localStorage.removeItem(name)
-    } catch (e) {
-      console.error('[mesh-studio] could not clear saved projects:', e)
-    }
-  },
-}
 
 export const useStore = create<AppState>()(
   persist(
@@ -54,6 +22,7 @@ export const useStore = create<AppState>()(
       ...initialNavigationState,
       ...initialBoardState,
       ...initialWorldState,
+      ...initialHistoryState,
       ...initialAssemblyState,
       ...initialAnimationState,
       ...initialExportState,
@@ -61,7 +30,8 @@ export const useStore = create<AppState>()(
       ...createProjectsSlice(set, get),
       ...createNavigationSlice(set, get),
       ...createBoardSlice(set, get),
-      ...createWorldSlice(set, get),
+      ...createWorldSlice(set),
+      ...createHistorySlice(set, get),
       ...createAssemblySlice(set, get),
       ...createAnimationSlice(set, get),
       ...createExportSlice(set),
@@ -69,7 +39,7 @@ export const useStore = create<AppState>()(
     {
       name: STORAGE_KEY,
       version: CURRENT_VERSION,
-      storage: createJSONStorage(() => safeStorage),
+      storage: createProjectStorage(),
       partialize: (state) => ({ projects: state.projects }),
       migrate: (persisted) => runMigrations(persisted),
       merge: (persisted, current) => ({ ...current, ...(persisted as Partial<AppState>) }),

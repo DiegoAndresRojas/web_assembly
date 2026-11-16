@@ -40,7 +40,7 @@ export function VideoExportDialog({ session }: { session: WorldSession | null })
         </select>
       </div>
       <div className="text-muted" style={{ fontSize: 11, marginTop: 'var(--space-2)' }}>
-        Shot through the animation camera at the viewport's size.
+        16:9 video at 1280×720, shot through the animation camera (or your view, if the stage has no camera).
       </div>
       {exportError && (
         <div

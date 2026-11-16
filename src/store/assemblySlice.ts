@@ -4,10 +4,8 @@ import { solveAxisAlign, vec } from '@/lib/keypoints'
 import { normalizeLink } from '@/lib/migrations'
 import { num } from '@/lib/utils'
 import { findProject } from './helpers'
-import type { AssemblyActions, AssemblyState, Get, Set, StageSnapshot } from './types'
-import type { Axis, KeypointLink, Stage, StageMember, Vec3 } from '@/types/project'
-
-const HISTORY_LIMIT = 20
+import type { AssemblyActions, AssemblyState, Get, Set } from './types'
+import type { Axis, KeypointLink, Stage, Vec3 } from '@/types/project'
 
 export const initialAssemblyState: AssemblyState = {
   kpOn: false,
@@ -15,17 +13,6 @@ export const initialAssemblyState: AssemblyState = {
   pendingPicks: [],
   kpEditing: null,
   gapPending: null,
-  canUndo: false,
-  canRedo: false,
-  history: [],
-  future: [],
-}
-
-function snapshot(stage: Stage): StageSnapshot {
-  return {
-    members: JSON.parse(JSON.stringify(stage.members)),
-    links: JSON.parse(JSON.stringify(stage.links)),
-  }
 }
 
 const WORLD_AXES: Record<Axis, THREE.Vector3> = {
@@ -83,18 +70,7 @@ function solveLinkInPlace(stage: Stage, link: KeypointLink): void {
 }
 
 export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
-  function pushHistory() {
-    set((state) => {
-      const project = findProject(state, state.pid)
-      const stage = project && state.aid ? project.stages[state.aid] : undefined
-      if (!stage) return
-      state.history.push(snapshot(stage))
-      if (state.history.length > HISTORY_LIMIT) state.history.shift()
-      state.future = []
-      state.canUndo = true
-      state.canRedo = false
-    })
-  }
+  const pushHistory = () => get().pushHistory()
 
   return {
     toggleKp(on) {
@@ -179,39 +155,6 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
       if (pending) get().removeLink(pending.linkId)
       set((state) => {
         state.gapPending = null
-      })
-    },
-
-    undoLink() {
-      if (!get().history.length) return
-      set((state) => {
-        const project = findProject(state, state.pid)
-        const stage = project && state.aid ? project.stages[state.aid] : undefined
-        if (!stage) return
-        state.future.push(snapshot(stage))
-        const prev = state.history.pop()
-        if (prev) {
-          stage.members = prev.members as StageMember[]
-          stage.links = prev.links as KeypointLink[]
-        }
-        state.canUndo = state.history.length > 0
-        state.canRedo = true
-      })
-    },
-    redoLink() {
-      if (!get().future.length) return
-      set((state) => {
-        const project = findProject(state, state.pid)
-        const stage = project && state.aid ? project.stages[state.aid] : undefined
-        if (!stage) return
-        state.history.push(snapshot(stage))
-        const next = state.future.pop()
-        if (next) {
-          stage.members = next.members as StageMember[]
-          stage.links = next.links as KeypointLink[]
-        }
-        state.canUndo = true
-        state.canRedo = state.future.length > 0
       })
     },
 

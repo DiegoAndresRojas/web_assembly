@@ -1,46 +1,117 @@
-import { useRef, type DragEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, type DragEvent, type PointerEvent, type RefObject } from 'react'
 
-import { PX_PER_SECOND } from '@/lib/constants'
 import { ticks as buildTicks, stageDuration } from '@/lib/timeline'
 import type { WorldSession } from '@/lib/three/worldSession'
+import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { useStore } from '@/store'
 import type { Project, Stage } from '@/types/project'
-import { ActionConfigEditor } from './ActionConfigEditor'
-import { TrackActions, TrackLabel } from './TrackLane'
+import { ActionInspector } from './ActionInspector'
+import { HEADER_W, TrackHeader, TrackLane } from './TrackLane'
+import { timelineRows } from './timelineRows'
+import { TransportBar } from './TransportBar'
+
+/** The playhead line across the tracks — its own component, since playT
+ *  changes every frame during playback and only this needs to follow it
+ *  (plus keeping it in view while playing). */
+function Playhead({ scrollRef }: { scrollRef: RefObject<HTMLDivElement | null> }) {
+  const playT = useStore((s) => s.playT)
+  const playing = useStore((s) => s.playing)
+  const px = useStore((s) => s.pxPerSecond)
+  const x = HEADER_W + playT * px
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !playing) return
+    if (x > el.scrollLeft + el.clientWidth - 40 || x < el.scrollLeft + HEADER_W) {
+      el.scrollLeft = Math.max(0, x - HEADER_W - 40)
+    }
+  }, [x, playing, scrollRef])
+
+  return <div className="tl-playhead" style={{ left: x }} />
+}
+
+/** The playhead's marker on the ruler. */
+function PlayheadCap() {
+  const playT = useStore((s) => s.playT)
+  const px = useStore((s) => s.pxPerSecond)
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: playT * px - 5,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        borderLeft: '5px solid transparent',
+        borderRight: '5px solid transparent',
+        borderTop: '7px solid var(--color-accent)',
+        pointerEvents: 'none',
+      }}
+    />
+  )
+}
 
 export interface TimelineDockProps {
   project: Project
+  stageId: string
   stage: Stage
   session: WorldSession | null
 }
 
-export function TimelineDock({ project, stage, session }: TimelineDockProps) {
-  const laneRef = useRef<HTMLDivElement>(null)
-  const scrubbingRef = useRef(false)
-  const cfgTarget = useStore((s) => s.cfgTarget)
-  const playT = useStore((s) => s.playT)
+/** The animation timeline: transport, ruler, one row per track (headers
+ *  stick to the left, the ruler to the top, both scroll with the lanes)
+ *  and the inspector for whatever is selected. Resizable from its top
+ *  edge; Ctrl + wheel zooms around the cursor. */
+export function TimelineDock({ project, stageId, stage, session }: TimelineDockProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const dockHeight = useStore((s) => s.dockHeight)
+  const px = useStore((s) => s.pxPerSecond)
+  const worldSelId = useStore((s) => s.worldSelId)
+  const selection = useStore((s) => s.selection)
   const seekTo = useStore((s) => s.seekTo)
+  const setDockHeight = useStore((s) => s.setDockHeight)
   const addMeshTrack = useStore((s) => s.addMeshTrack)
 
-  const dur = Math.max(1, stageDuration(stage))
-  const ticks = buildTicks(dur, PX_PER_SECOND)
-  const laneWidth = Math.max(dur * PX_PER_SECOND + 60, 400)
+  const rows = timelineRows(project, stageId, stage)
+  const dur = stageDuration(stage)
+  // room past the last action to drag things further out
+  const laneSeconds = Math.max(dur + 2, 6)
+  const laneWidth = laneSeconds * px
+  const ticks = buildTicks(laneSeconds, px)
 
-  const scrubToClientX = (clientX: number) => {
-    const rect = laneRef.current?.getBoundingClientRect()
-    if (!rect) return
-    seekTo((clientX - rect.left) / PX_PER_SECOND)
+  // Ctrl + wheel zoom, keeping the time under the cursor in place (a
+  // native non-passive listener: React's onWheel can't preventDefault)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const s = useStore.getState()
+      const x = e.clientX - el.getBoundingClientRect().left
+      const t = (x + el.scrollLeft - HEADER_W) / s.pxPerSecond
+      s.setZoom(s.pxPerSecond * (e.deltaY < 0 ? 1.15 : 1 / 1.15))
+      const next = useStore.getState().pxPerSecond
+      el.scrollLeft = Math.max(0, t * next + HEADER_W - x)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const resize = useRef<{ y0: number; h0: number } | null>(null)
+  const onResizeDown = (e: PointerEvent<HTMLDivElement>) => {
+    resize.current = { y0: e.clientY, h0: dockHeight }
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
-  const onSeek = (e: PointerEvent) => {
-    scrubbingRef.current = true
-    scrubToClientX(e.clientX)
+  const onResizeMove = (e: PointerEvent<HTMLDivElement>) => {
+    const r = resize.current
+    if (r) setDockHeight(r.h0 - (e.clientY - r.y0))
   }
-  const onDragMove = (e: PointerEvent) => {
-    if (scrubbingRef.current) scrubToClientX(e.clientX)
-  }
-  const onDragEnd = () => {
-    scrubbingRef.current = false
-  }
+
+  const scrubbing = useRef(false)
+  const scrubTo = (clientX: number, el: HTMLElement) =>
+    seekTo((clientX - el.getBoundingClientRect().left) / px)
+
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
     const nodeId = e.dataTransfer.getData('text/ms-node-id')
@@ -49,60 +120,47 @@ export function TimelineDock({ project, stage, session }: TimelineDockProps) {
 
   return (
     <div
-      style={{
-        flex: '0 0 33.3333%',
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--color-surface)',
-        boxShadow: '0 -1px 0 var(--color-divider)',
-      }}
+      className="tl-dock"
+      style={{ height: dockHeight }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
-      {cfgTarget ? (
-        <ActionConfigEditor session={session} />
-      ) : (
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            overflow: 'hidden',
-            padding: 'var(--space-2) 0',
-          }}
-        >
-          <div
-            style={{
-              width: 168,
-              flex: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              boxShadow: 'inset -1px 0 0 var(--color-divider)',
-            }}
-          >
-            <div style={{ height: 22, flex: 'none' }} />
-            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {stage.tracks.map((t) => (
-                <TrackLabel key={t.id} project={project} track={t} />
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }}
-            onPointerDown={onSeek}
-            onPointerMove={onDragMove}
-            onPointerUp={onDragEnd}
-            onPointerLeave={onDragEnd}
-          >
-            <div ref={laneRef} style={{ position: 'relative', width: laneWidth }}>
+      <div
+        className="tl-resize"
+        title="Drag to resize"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={() => (resize.current = null)}
+      />
+      <TransportBar stage={stage} session={session} />
+      <div className="tl-body">
+        <div className="tl-scroll" ref={scrollRef}>
+          <div style={{ position: 'relative', width: HEADER_W + laneWidth, minHeight: '100%' }}>
+            <div className="tl-ruler-row">
               <div
+                className="tl-corner text-muted"
                 style={{
-                  height: 22,
-                  position: 'relative',
-                  boxShadow: 'inset 0 -1px 0 var(--color-divider)',
+                  width: HEADER_W,
+                  fontSize: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0 8px',
                 }}
+              >
+                {rows.length} {rows.length === 1 ? 'track' : 'tracks'}
+              </div>
+              <div
+                className="tl-ruler"
+                style={{ width: laneWidth }}
+                onPointerDown={(e) => {
+                  scrubbing.current = true
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  scrubTo(e.clientX, e.currentTarget)
+                }}
+                onPointerMove={(e) => {
+                  if (scrubbing.current) scrubTo(e.clientX, e.currentTarget)
+                }}
+                onPointerUp={() => (scrubbing.current = false)}
               >
                 {ticks.map((tick) => (
                   <div
@@ -110,34 +168,66 @@ export function TimelineDock({ project, stage, session }: TimelineDockProps) {
                     style={{
                       position: 'absolute',
                       left: tick.x,
-                      top: 0,
-                      fontSize: 9,
-                      color: 'var(--color-neutral-500)',
+                      bottom: 0,
+                      width: 1,
+                      height: tick.label ? 8 : 4,
+                      background: 'var(--color-neutral-700)',
+                      pointerEvents: 'none',
                     }}
                   >
-                    {tick.label}
+                    {tick.label && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: 3,
+                          bottom: 7,
+                          fontSize: 9,
+                          color: 'var(--color-neutral-500)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {tick.label}
+                      </span>
+                    )}
                   </div>
                 ))}
+                <PlayheadCap />
               </div>
-              {stage.tracks.map((t) => (
-                <TrackActions key={t.id} track={t} />
-              ))}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: playT * PX_PER_SECOND,
-                  width: 1,
-                  background: 'var(--color-accent)',
-                  pointerEvents: 'none',
-                  zIndex: 2,
-                }}
-              />
             </div>
+
+            {rows.map((row) => {
+              const active =
+                (row.key ?? ANIM_CAMERA_KEY) === worldSelId || selection?.trackId === row.track.id
+              return (
+                <div key={row.track.id} className={'tl-row' + (active ? ' tl-row--active' : '')}>
+                  <TrackHeader row={row} active={active} />
+                  <TrackLane track={row.track} width={laneWidth} />
+                </div>
+              )
+            })}
+            {rows.length === 0 && (
+              <div
+                className="text-muted"
+                style={{
+                  position: 'sticky',
+                  left: 0,
+                  width: 'min(100%, 520px)',
+                  padding: 'var(--space-4)',
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                }}
+              >
+                No tracks yet. Select a piece in the viewport or the scene list, move it with the
+                gizmo and press <b>K</b> (Record pose) — or use <b>+</b> next to it in the scene
+                list.
+              </div>
+            )}
+
+            <Playhead scrollRef={scrollRef} />
           </div>
         </div>
-      )}
+        <ActionInspector project={project} stageId={stageId} stage={stage} session={session} />
+      </div>
     </div>
   )
 }

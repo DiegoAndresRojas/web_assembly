@@ -1,8 +1,7 @@
-import { keyRefersTo, membersOf } from '@/lib/graph'
-import { normalizeStage } from '@/lib/migrations'
+import { keyRefersTo, membersOf, parentKey } from '@/lib/graph'
 import { clamp } from '@/lib/utils'
 import { ensureStage, findProject, stageKindFromNode } from './helpers'
-import type { Get, Set, WorldActions, WorldState } from './types'
+import type { Set, WorldActions, WorldState } from './types'
 
 export const initialWorldState: WorldState = {
   worldSelId: null,
@@ -11,11 +10,16 @@ export const initialWorldState: WorldState = {
   opacityOpenId: null,
 }
 
-export function createWorldSlice(set: Set, get: Get): WorldActions {
+export function createWorldSlice(set: Set): WorldActions {
   return {
     selectWorldObject(nodeId) {
       set((state) => {
         state.worldSelId = nodeId
+      })
+    },
+    selectParentPiece() {
+      set((state) => {
+        state.worldSelId = state.worldSelId ? parentKey(state.worldSelId) : null
       })
     },
     setGizmoMode(mode) {
@@ -45,6 +49,22 @@ export function createWorldSlice(set: Set, get: Get): WorldActions {
         if (member) member.opacity = clamp(value, 0.05, 1)
       })
     },
+    togglePartVisible(key) {
+      set((state) => {
+        const stage = findProject(state, state.pid)?.stages[state.aid ?? '']
+        if (!stage) return
+        const look = (stage.partLooks[key] ??= { visible: true, opacity: 1 })
+        look.visible = !look.visible
+      })
+    },
+    setPartOpacity(key, value) {
+      set((state) => {
+        const stage = findProject(state, state.pid)?.stages[state.aid ?? '']
+        if (!stage) return
+        const look = (stage.partLooks[key] ??= { visible: true, opacity: 1 })
+        look.opacity = clamp(value, 0.05, 1)
+      })
+    },
     toggleOpacityUI(nodeId) {
       set((state) => {
         state.opacityOpenId = state.opacityOpenId === nodeId ? null : nodeId
@@ -62,6 +82,9 @@ export function createWorldSlice(set: Set, get: Get): WorldActions {
         if (stage) {
           stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
           stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
+          for (const key of Object.keys(stage.partLooks ?? {})) {
+            if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
+          }
           stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
         }
         if (state.worldSelId === nodeId) state.worldSelId = null
@@ -95,30 +118,6 @@ export function createWorldSlice(set: Set, get: Get): WorldActions {
           }
         })
       })
-    },
-
-    observableStages() {
-      const { aid, pid, projects } = get()
-      const project = projects.find((p) => p.id === pid)
-      if (!project) return []
-      return project.board.nodes
-        .filter((n) => n.id !== aid && n.kind !== 'mesh')
-        .map((n) => ({ id: n.id, label: n.label ?? n.kind }))
-    },
-    toggleObserve(stageNodeId) {
-      set((state) => {
-        const project = findProject(state, state.pid)
-        const aid = state.aid
-        if (!project || !aid) return
-        const stage =
-          project.stages[aid] ?? (project.stages[aid] = normalizeStage({ kind: 'observer' }))
-        const i = stage.observing.indexOf(stageNodeId)
-        if (i >= 0) stage.observing.splice(i, 1)
-        else stage.observing.push(stageNodeId)
-      })
-    },
-    removeObserved(stageNodeId) {
-      get().toggleObserve(stageNodeId)
     },
   }
 }

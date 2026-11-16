@@ -6,7 +6,6 @@ import type { BoardNode as BoardNodeData, MeshRecord } from '@/types/project'
 
 const STAGE_COLOR: Record<string, string> = {
   assembly: 'var(--color-accent)',
-  observer: 'var(--color-neutral-300)',
   animation: 'var(--color-neutral-300)',
 }
 
@@ -22,6 +21,7 @@ export interface BoardNodeProps {
   onDoubleClick: () => void
   onDelete: (e: PointerEvent) => void
   onColor: (e: PointerEvent) => void
+  onScale: (e: PointerEvent) => void
   onLinkStart: (e: PointerEvent) => void
 }
 
@@ -37,6 +37,7 @@ export function BoardNode({
   onDoubleClick,
   onDelete,
   onColor,
+  onScale,
   onLinkStart,
 }: BoardNodeProps) {
   const isMesh = node.kind === 'mesh'
@@ -81,9 +82,14 @@ export function BoardNode({
           }}
         >
           {isMesh && (
-            <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onColor}>
-              Color
-            </button>
+            <>
+              <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onColor}>
+                Color
+              </button>
+              <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onScale}>
+                Scale
+              </button>
+            </>
           )}
           <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onDelete}>
             Delete
@@ -128,6 +134,24 @@ export function BoardNode({
               >
                 {mesh?.ext.toUpperCase() ?? ''}
               </span>
+              {node.scale !== 1 && (
+                <span
+                  title={`Scaled ×${node.scale}`}
+                  style={{
+                    position: 'absolute',
+                    top: node.color ? 10 : 6,
+                    right: 6,
+                    padding: '1px 5px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-accent-800)',
+                    color: 'var(--color-accent-100)',
+                    fontSize: 10,
+                    fontFamily: 'ui-monospace, monospace',
+                  }}
+                >
+                  ×{node.scale}
+                </span>
+              )}
             </div>
             <div
               style={{
@@ -208,9 +232,7 @@ export function BoardNode({
               color,
             }}
           >
-            {node.kind === 'observer' ? (
-              <EyeIcon size={26} />
-            ) : node.kind === 'animation' ? (
+            {node.kind === 'animation' ? (
               <FilmIcon size={25} />
             ) : (
               <PlusIcon size={26} />

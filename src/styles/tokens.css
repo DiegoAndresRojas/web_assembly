@@ -169,8 +169,10 @@ a:hover {
 .icon-btn:hover {
   color: var(--color-text);
 }
-.icon-btn--active {
-  color: var(--color-accent-200);
+.icon-btn--active,
+.icon-btn--active:hover {
+  color: var(--color-accent-100);
+  background: rgba(150, 138, 224, 0.22);
 }
 
 .tool-btn {
@@ -185,8 +187,9 @@ a:hover {
   border: none;
 }
 .tool-btn--active {
-  background: var(--color-accent-800);
-  color: var(--color-accent-100);
+  background: var(--color-accent-700);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--color-accent-300);
 }
 
 /* ---- nav / cards ---- */
@@ -292,9 +295,9 @@ a:hover {
   pointer-events: none;
 }
 .seg-opt:has(input:checked) {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
+  background: var(--color-accent-700);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--color-accent-300);
 }
 
 /* ---- dialogs ---- */
@@ -333,4 +336,243 @@ a:hover {
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-6);
+}
+
+/* ---------- animation editor: outliner, timeline dock, inspector ---------- */
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.outline-row:hover {
+  background: var(--color-neutral-900);
+}
+.outline-row--selected,
+.outline-row--selected:hover {
+  background: var(--color-accent-800);
+}
+
+/* A button whose effect stays on (toggles: loop, snap, look through,
+   keypoint picking, union…) — the same "pressed" look everywhere. */
+.btn--on,
+.btn--on:hover:not(:disabled) {
+  background: var(--color-accent-700);
+  color: #fff;
+  border-color: var(--color-accent-300);
+}
+.btn--on svg {
+  color: #fff;
+}
+
+/* Something is running (playback) — a soft pulse around the button. */
+.btn--live {
+  animation: ms-live 1.4s ease-in-out infinite;
+}
+@keyframes ms-live {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(150, 138, 224, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(150, 138, 224, 0);
+  }
+}
+
+/* A status pill for an active mode, e.g. over the viewport. */
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 999px;
+  background: var(--color-accent-700);
+  color: #fff;
+  font-size: 11px;
+  box-shadow: var(--shadow-md);
+}
+
+.num-input {
+  width: 64px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.tl-dock {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  box-shadow: 0 -1px 0 var(--color-divider);
+  position: relative;
+}
+.tl-resize {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 6;
+}
+.tl-resize:hover {
+  background: linear-gradient(transparent 3px, var(--color-accent-700) 3px, var(--color-accent-700) 5px, transparent 5px);
+}
+.tl-transport {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+.tl-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--color-divider);
+  flex: none;
+}
+.tl-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.tl-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+}
+.tl-ruler-row {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  height: 24px;
+  background: var(--color-surface);
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+.tl-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  background: var(--color-surface);
+  box-shadow: inset -1px 0 0 var(--color-divider), inset 0 -1px 0 var(--color-divider);
+}
+.tl-ruler {
+  position: relative;
+  flex: none;
+  cursor: col-resize;
+}
+.tl-row {
+  display: flex;
+  height: 32px;
+}
+.tl-head {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-2);
+  background: var(--color-surface);
+  box-shadow: inset -1px 0 0 var(--color-divider), inset 0 -1px 0 var(--color-neutral-900);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+.tl-row--active .tl-head {
+  background: #262a40;
+}
+.tl-lane {
+  position: relative;
+  flex: none;
+  box-shadow: inset 0 -1px 0 var(--color-neutral-900);
+}
+.tl-block {
+  position: absolute;
+  top: 4px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+.tl-block:hover {
+  background: #4a3f80;
+}
+.tl-block--selected,
+.tl-block--selected:hover {
+  background: var(--color-accent-700);
+  box-shadow: 0 0 0 1px var(--color-accent-300);
+}
+.tl-block:active {
+  cursor: grabbing;
+}
+.tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+}
+.tl-handle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.tl-init {
+  display: block;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-radius: 1px;
+  background: var(--color-neutral-500);
+}
+.tl-init:hover,
+.tl-init--selected {
+  background: var(--color-accent-300);
+}
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-accent);
+  pointer-events: none;
+  z-index: 1;
+}
+.tl-inspector {
+  width: 300px;
+  flex: none;
+  overflow: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: inset 1px 0 0 var(--color-divider);
+}
+.tl-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-neutral-500);
 }

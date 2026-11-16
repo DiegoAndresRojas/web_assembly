@@ -15,31 +15,23 @@ export function App() {
   const view = useStore((s) => s.view)
   const aid = useStore((s) => s.aid)
   const setCtrlDown = useStore((s) => s.setCtrlDown)
-  const undoLink = useStore((s) => s.undoLink)
-  const redoLink = useStore((s) => s.redoLink)
 
+  // (stage shortcuts — undo, playback, timeline — live in useShortcuts,
+  // mounted by WorldView)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Control' || e.key === 'Meta') setCtrlDown(e.type === 'keydown')
     }
-    const onUndoRedo = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
-      e.preventDefault()
-      if (e.shiftKey) redoLink()
-      else undoLink()
-    }
     const onBlur = () => setCtrlDown(false)
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey)
-    window.addEventListener('keydown', onUndoRedo)
     window.addEventListener('blur', onBlur)
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKey)
-      window.removeEventListener('keydown', onUndoRedo)
       window.removeEventListener('blur', onBlur)
     }
-  }, [setCtrlDown, undoLink, redoLink])
+  }, [setCtrlDown])
 
   return (
     <div

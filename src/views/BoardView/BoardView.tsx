@@ -6,6 +6,7 @@ import { BoardCanvas } from './BoardCanvas'
 import { ColorDialog } from './ColorDialog'
 import { DeleteMeshDialog } from './DeleteMeshDialog'
 import { MeshLibrary } from './MeshLibrary'
+import { ScaleDialog } from './ScaleDialog'
 
 function PaletteToken({
   icon,
@@ -19,7 +20,7 @@ function PaletteToken({
   icon: React.ReactNode
   label: string
   active: boolean
-  dataKind: 'assembly' | 'observer' | 'animation'
+  dataKind: 'assembly' | 'animation'
   onDragStart: (e: DragEvent) => void
   onEnter: () => void
   onLeave: () => void
@@ -71,7 +72,6 @@ export function BoardView() {
   const backToProjects = useStore((s) => s.backToProjects)
   const renameProject = useStore((s) => s.renameProject)
   const hoverAssembly = useStore((s) => s.hoverAssembly)
-  const hoverObserver = useStore((s) => s.hoverObserver)
   const hoverAnimation = useStore((s) => s.hoverAnimation)
   const setPaletteHover = useStore((s) => s.setPaletteHover)
 
@@ -136,15 +136,6 @@ export function BoardView() {
               onLeave={() => setPaletteHover(null)}
             />
             <PaletteToken
-              icon={<EyeIcon size={20} />}
-              label="Observer"
-              active={hoverObserver}
-              dataKind="observer"
-              onDragStart={(e) => e.dataTransfer.setData('text/ms-node-kind', 'observer')}
-              onEnter={() => setPaletteHover('observer')}
-              onLeave={() => setPaletteHover(null)}
-            />
-            <PaletteToken
               icon={<FilmIcon size={19} />}
               label="Animation"
               active={hoverAnimation}
@@ -160,6 +151,7 @@ export function BoardView() {
       <BoardCanvas project={project} />
 
       <ColorDialog project={project} />
+      <ScaleDialog project={project} />
       <DeleteMeshDialog />
     </div>
   )

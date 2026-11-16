@@ -11,7 +11,10 @@ import type {
   PickHit,
   Pose,
   Project,
+  StageCamera,
   StageMember,
+  TimelineAction,
+  Track,
   Vec3,
   WorldMode,
 } from '@/types/project'
@@ -28,10 +31,20 @@ export interface ColorEdit {
   value: string
 }
 
+export interface ScaleEdit {
+  nodeId: string
+  /** The file's size in native units. */
+  size: Vec3
+  factor: number
+  /** Opened automatically because a dropped piece is very small. */
+  prompted: boolean
+}
+
 export interface ProjectsState {
   projects: Project[]
   confirm: DeleteConfirm | null
   colorEdit: ColorEdit | null
+  scaleEdit: ScaleEdit | null
 }
 
 export interface ProjectsActions {
@@ -46,6 +59,12 @@ export interface ProjectsActions {
   cancelColorEditor: () => void
   setColorDraft: (value: string) => void
   applyColorEditor: () => void
+  /** Measures the node's file if needed and opens the scale dialog —
+   *  `prompted`: only if the piece is very small, suggesting a factor. */
+  openScaleEditor: (nodeId: string, prompted?: boolean) => Promise<void>
+  setScaleDraft: (factor: number) => void
+  cancelScaleEditor: () => void
+  applyScaleEditor: () => void
 }
 
 // ---------- navigation ----------
@@ -81,7 +100,6 @@ export interface BoardState {
   linking: LinkingDraft | null
   meshFilterExt: string | null
   hoverAssembly: boolean
-  hoverObserver: boolean
   hoverAnimation: boolean
 }
 
@@ -96,7 +114,7 @@ export interface BoardActions {
   panBy: (dx: number, dy: number) => void
   setPan: (x: number, y: number) => void
   dropMeshOnBoard: (meshId: string, x: number, y: number) => void
-  dropStageOnBoard: (kind: 'assembly' | 'observer' | 'animation', x: number, y: number) => void
+  dropStageOnBoard: (kind: 'assembly' | 'animation', x: number, y: number) => void
   moveNode: (nodeId: string, x: number, y: number) => void
   linkIfDropped: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
@@ -108,11 +126,12 @@ export interface BoardActions {
   cancelLinking: () => void
   selectEdge: (edgeId: string | null) => void
   deleteSelectedEdge: () => void
+  removeEdge: (edgeId: string) => void
   setMeshFilter: (ext: string | null) => void
-  setPaletteHover: (which: 'assembly' | 'observer' | 'animation' | null) => void
+  setPaletteHover: (which: 'assembly' | 'animation' | null) => void
 }
 
-// ---------- world (assembly/observer/animate shared) ----------
+// ---------- world (assembly/animate shared) ----------
 export interface WorldState {
   worldSelId: string | null
   gizmoMode: 'translate' | 'rotate'
@@ -122,24 +141,46 @@ export interface WorldState {
 
 export interface WorldActions {
   selectWorldObject: (nodeId: string | null) => void
+  /** From a piece inside an assembly input up to the assembly holding it
+   *  (deselects at the top). */
+  selectParentPiece: () => void
   setGizmoMode: (mode: 'translate' | 'rotate') => void
   setHint: (hint: string) => void
   toggleMemberVisible: (nodeId: string) => void
   setMemberOpacity: (nodeId: string, value: number) => void
+  /** Visibility / opacity of one piece inside an assembly input, by part
+   *  key, in the open stage. */
+  togglePartVisible: (key: string) => void
+  setPartOpacity: (key: string, value: number) => void
   toggleOpacityUI: (nodeId: string) => void
   removeMember: (nodeId: string) => void
   syncStageMembers: (stageId: string) => void
-  observableStages: () => Array<{ id: string; label: string }>
-  toggleObserve: (stageNodeId: string) => void
-  removeObserved: (stageNodeId: string) => void
 }
 
-// ---------- assembly (keypoint linking) ----------
+// ---------- history (undo/redo for the open stage) ----------
 export interface StageSnapshot {
   members: StageMember[]
   links: KeypointLink[]
+  tracks: Track[]
+  camera: StageCamera | null
 }
 
+export interface HistoryState {
+  canUndo: boolean
+  canRedo: boolean
+  history: StageSnapshot[]
+  future: StageSnapshot[]
+}
+
+export interface HistoryActions {
+  /** Snapshot the open stage before an undoable edit. */
+  pushHistory: () => void
+  undo: () => void
+  redo: () => void
+  clearHistory: () => void
+}
+
+// ---------- assembly (keypoint linking) ----------
 export interface AssemblyState {
   kpOn: boolean
   /** 'edges' = corners + edge midpoints, 'faces' = flat-face centers. */
@@ -147,10 +188,6 @@ export interface AssemblyState {
   pendingPicks: PickHit[]
   kpEditing: string | null
   gapPending: { linkId: string; gap: number } | null
-  canUndo: boolean
-  canRedo: boolean
-  history: StageSnapshot[]
-  future: StageSnapshot[]
 }
 
 export interface AssemblyActions {
@@ -163,8 +200,6 @@ export interface AssemblyActions {
   removeLink: (linkId: string) => void
   acceptGap: () => void
   rejectGap: () => void
-  undoLink: () => void
-  redoLink: () => void
   openKpEdit: (linkId: string) => void
   closeKpEdit: () => void
   cancelKpEdit: () => void
@@ -174,57 +209,65 @@ export interface AssemblyActions {
 }
 
 // ---------- animation ----------
-export interface PoseDraft {
-  pos: Vec3
-  rot: Vec3
-}
-export interface ActionDraft {
-  fromPose: PoseDraft
-  toPose: PoseDraft
-  start: number
-  duration: number
-  toLinked: boolean
-  editingSide: 'from' | 'to' | null
-}
-export interface ConfigTarget {
+/** What the timeline inspector is showing: one action, or a track's
+ *  initial pose (`'init'`). */
+export interface TimelineSelection {
   trackId: string
-  actionId: string | null
-  isNew: boolean
-  isInit: boolean
+  actionId: string | 'init'
 }
+
+export type ActionPatch = Partial<
+  Pick<TimelineAction, 'start' | 'duration' | 'ease' | 'fromLinked' | 'toLinked' | 'fromPose' | 'toPose'>
+>
 
 export interface AnimationState {
   playT: number
   playing: boolean
-  cfgTarget: ConfigTarget | null
-  cfgDraft: ActionDraft | null
+  loop: boolean
+  snap: boolean
+  /** Timeline zoom. */
+  pxPerSecond: number
+  dockHeight: number
+  /** Look through the animation camera while playing / scrubbing. */
+  cameraView: boolean
+  selection: TimelineSelection | null
 }
 
 export interface AnimationActions {
   onAnimPlay: () => void
+  /** Pause and go back to t = 0. */
   onAnimReset: () => void
-  onObsPlay: () => void
-  onObsReset: () => void
   seekTo: (t: number) => void
+  setLoop: (on: boolean) => void
+  setSnap: (on: boolean) => void
+  setZoom: (pxPerSecond: number) => void
+  setDockHeight: (px: number) => void
+  setCameraView: (on: boolean) => void
+
   addMeshTrack: (nodeId: string) => void
-  addCameraTrack: (currentCameraPose?: PoseDraft) => void
+  addCameraTrack: (currentCameraPose?: Pose) => void
   removeTrack: (trackId: string) => void
   confirmRemoveTrack: () => void
   onCamKill: () => void
   confirmCamDelete: () => void
   cancelCamDelete: () => void
-  openInitEditor: (trackId: string) => void
-  openNewAction: (trackId: string) => void
-  openAction: (trackId: string, actionId: string) => void
-  tlCancelConfig: () => void
-  tlSaveConfig: () => void
-  onCfgDelete: () => void
-  setDraftStart: (v: number) => void
-  setDraftDuration: (v: number) => void
-  setDraftAxis: (side: 'from' | 'to', kind: 'pos' | 'rot', axis: Axis, value: number) => void
-  setEditingSide: (side: 'from' | 'to' | null) => void
-  setDraftPoseFromCamera: (side: 'from' | 'to', pose: PoseDraft) => void
-  setDraftToLinked: (checked: boolean) => void
+
+  selectAction: (sel: TimelineSelection | null) => void
+  /** New chained action at `t` (1 s, or up to the next action), ending at
+   *  `toPose` or wherever the track is at `t`. Returns its id. */
+  addActionAt: (trackId: string, t: number, toPose?: Pose) => string | null
+  /** Live edit (drags, typing) — call beginEdit() once before a gesture so
+   *  the whole gesture is a single undo step. */
+  updateAction: (trackId: string, actionId: string, patch: ActionPatch) => void
+  beginEdit: () => void
+  /** Live edit, like updateAction (call beginEdit first). */
+  setInitPose: (trackId: string, pose: Pose) => void
+  duplicateAction: (trackId: string, actionId: string) => void
+  deleteAction: (trackId: string, actionId: string) => void
+  /** "Record" a pose taken from the viewport for a piece (or `'camera'`):
+   *  sets the end of the selected action if it belongs to that piece's
+   *  track, otherwise creates an action at the playhead. */
+  recordPose: (key: string, pose: Pose) => void
 }
 
 // ---------- export dialogs (execution lives in hooks, not the store) ----------
@@ -259,6 +302,8 @@ export type AppState = ProjectsState &
   BoardActions &
   WorldState &
   WorldActions &
+  HistoryState &
+  HistoryActions &
   AssemblyState &
   AssemblyActions &
   AnimationState &

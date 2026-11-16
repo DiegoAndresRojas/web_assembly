@@ -101,6 +101,58 @@ export function DownloadIcon(props: IconProps) {
   )
 }
 
+// ---------- transport / timeline (24×24 geometry) ----------
+
+export function PlayIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+}
+
+export function PauseIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M6 4h4v16H6zM14 4h4v16h-4z" />
+}
+
+export function SkipBackIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M5 4h3v16H5zM19 5.1v13.8a1 1 0 0 1-1.55.83L8.9 12.83a1 1 0 0 1 0-1.66l8.55-6.9A1 1 0 0 1 19 5.1Z" />
+}
+
+export function RepeatIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M4 11V9a3 3 0 0 1 3-3h10V3l4 4-4 4V8H7a1 1 0 0 0-1 1v2H4ZM20 13v2a3 3 0 0 1-3 3H7v3l-4-4 4-4v3h10a1 1 0 0 0 1-1v-2h2Z"
+    />
+  )
+}
+
+export function MagnetIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0V3Z"
+    />
+  )
+}
+
+export function RecordIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z" />
+}
+
+export function ArrowUpIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M12 3 20 11.5h-5.5V21h-5v-9.5H4L12 3Z" />
+}
+
+export function DuplicateIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M9 3h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-3v-2h2V5h-9v2H8V4a1 1 0 0 1 1-1ZM4 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm1 2v9h9v-9H5Z"
+    />
+  )
+}
+
 export function FilmIcon(props: IconProps) {
   return (
     <svg

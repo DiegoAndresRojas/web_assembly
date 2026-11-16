@@ -18,7 +18,6 @@ export const initialBoardState: BoardState = {
   linking: null,
   meshFilterExt: null,
   hoverAssembly: false,
-  hoverObserver: false,
   hoverAnimation: false,
 }
 
@@ -80,11 +79,24 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     },
 
     dropMeshOnBoard(meshId, x, y) {
+      const id = uid()
       set((state) => {
         const project = findProject(state, state.pid)
         if (!project) return
-        project.board.nodes.push({ id: uid(), kind: 'mesh', x, y, meshId, label: null, color: null })
+        project.board.nodes.push({
+          id,
+          kind: 'mesh',
+          x,
+          y,
+          meshId,
+          label: null,
+          color: null,
+          scale: 1,
+        })
       })
+      // a very small piece (e.g. modelled in meters) gets offered a scale-up
+      // to whole units right away
+      void get().openScaleEditor(id, true)
     },
     dropStageOnBoard(kind, x, y) {
       set((state) => {
@@ -93,7 +105,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const count = project.board.nodes.filter((n) => n.kind === kind).length + 1
         const label = kind[0].toUpperCase() + kind.slice(1) + ' ' + count
         const id = uid()
-        project.board.nodes.push({ id, kind, x, y, meshId: null, label, color: null })
+        project.board.nodes.push({ id, kind, x, y, meshId: null, label, color: null, scale: 1 })
         // WorldView renders nothing for a stage that has no `stages[id]`
         // record yet — create it up front instead of waiting for openStage.
         project.stages[id] = normalizeStage({ kind })
@@ -110,32 +122,24 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       })
     },
     linkIfDropped(nodeId) {
-      // Dragging a mesh node's own body on top of a stage node (the
-      // intuitive gesture) links them too — not just dragging from the
-      // tiny link handle, which is easy to miss since it only appears on
-      // hover.
+      // Dropping a dragged mesh node onto an assembly / animation node (the
+      // intuitive gesture) links them — besides the link handle, which is
+      // easy to miss since it only appears on hover. Deliberately narrow:
+      // only a mesh being dragged (never a stage dragged over a mesh while
+      // tidying the board).
       set((state) => {
         const project = findProject(state, state.pid)
         const dragged = project?.board.nodes.find((n) => n.id === nodeId)
-        if (!project || !dragged) return
-        // Look for a node of the OPPOSITE kind first — dropping a mesh
-        // that ends up overlapping both a stage node and another mesh
-        // node (e.g. two meshes dropped on the very same spot) must not
-        // match the other mesh instead of the stage.
-        const wantsStage = dragged.kind === 'mesh'
-        const overlapping = (n: (typeof project.board.nodes)[number]) =>
-          n.id !== dragged.id && pointInNode(n.kind, n.x, n.y, dragged.x, dragged.y)
-        const target =
-          project.board.nodes.find((n) => overlapping(n) && (n.kind === 'mesh') !== wantsStage) ??
-          project.board.nodes.find((n) => overlapping(n) && (n.kind === 'mesh') === wantsStage)
-        if (!target) return
-        const meshEnd = dragged.kind === 'mesh' ? dragged : target
-        const stageEnd = dragged.kind === 'mesh' ? target : dragged
-        if (meshEnd.kind !== 'mesh' || stageEnd.kind === 'mesh') return
-        const exists = project.board.edges.some(
-          (e) => e.from === meshEnd.id && e.to === stageEnd.id,
+        if (!project || !dragged || dragged.kind !== 'mesh') return
+        const target = project.board.nodes.find(
+          (n) =>
+            n.id !== dragged.id &&
+            (n.kind === 'assembly' || n.kind === 'animation') &&
+            pointInNode(n.kind, n.x, n.y, dragged.x, dragged.y),
         )
-        if (!exists) project.board.edges.push({ id: uid(), from: meshEnd.id, to: stageEnd.id })
+        if (!target) return
+        const exists = project.board.edges.some((e) => e.from === dragged.id && e.to === target.id)
+        if (!exists) project.board.edges.push({ id: uid(), from: dragged.id, to: target.id })
       })
     },
     selectNode(nodeId) {
@@ -166,7 +170,9 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
           stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
           stage.links = stage.links.filter((l) => l.nodeA !== nodeId && l.nodeB !== nodeId)
           stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
-          stage.observing = stage.observing.filter((id) => id !== nodeId)
+          for (const key of Object.keys(stage.partLooks ?? {})) {
+            if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
+          }
         }
         if (state.selId === nodeId) state.selId = null
       })
@@ -218,6 +224,13 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         state.selId = null
       })
     },
+    removeEdge(edgeId) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        if (project) project.board.edges = project.board.edges.filter((e) => e.id !== edgeId)
+        if (state.selEdge === edgeId) state.selEdge = null
+      })
+    },
     deleteSelectedEdge() {
       const { selEdge, pid } = get()
       if (!selEdge) return
@@ -236,7 +249,6 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     setPaletteHover(which) {
       set((state) => {
         state.hoverAssembly = which === 'assembly'
-        state.hoverObserver = which === 'observer'
         state.hoverAnimation = which === 'animation'
       })
     },

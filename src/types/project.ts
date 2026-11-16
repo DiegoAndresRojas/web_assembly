@@ -22,11 +22,14 @@ export interface MeshRecord {
   origin: 'original'
   data: string | null // data URL
   color: string | null
+  /** Bounding-box size in the file's native units, measured the first time
+   *  the file is dropped on the board (null until then). */
+  size: Vec3 | null
 }
 
-export type NodeKind = 'mesh' | 'assembly' | 'observer' | 'animation'
-export type StageKind = 'assembly' | 'observer' | 'animation'
-export type WorldMode = 'assembly' | 'observer' | 'animate'
+export type NodeKind = 'mesh' | 'assembly' | 'animation'
+export type StageKind = 'assembly' | 'animation'
+export type WorldMode = 'assembly' | 'animate'
 
 export interface BoardNode {
   id: string
@@ -37,6 +40,9 @@ export interface BoardNode {
   label: string | null
   /** Per board node, so the same file dropped twice can be colored apart. */
   color: string | null
+  /** Uniform scale over the file's native units (1 = as authored) — per
+   *  node too, e.g. a part modelled in meters brought up to whole units. */
+  scale: number
 }
 
 export interface BoardEdge {
@@ -69,13 +75,22 @@ export interface KeypointLink {
   gap: number
 }
 
+export type Ease = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'
+
 export interface TimelineAction {
   id: string
   kind: 'move'
+  /** Own start pose — only used when `fromLinked` is off. */
   fromPose: Pose
+  /** Own end pose — only used when `toLinked` is off. */
   toPose: Pose
+  /** Start where the previous action on the track ended (or the track's
+   *  initial pose): actions chain instead of jumping. */
   fromLinked: boolean
+  /** End at the piece's connector pose — where the assembly's links put
+   *  it — so a piece can fly back into place. */
   toLinked: boolean
+  ease: Ease
   start: number
   duration: number
 }
@@ -105,8 +120,15 @@ export interface Stage {
   links: KeypointLink[]
   camera: StageCamera | null
   tracks: Track[]
-  observing: string[]
   union: StageUnion | null
+  /** Visibility / opacity of pieces inside assembly inputs, by part key
+   *  (an animation can hide or fade a single piece of an assembly). */
+  partLooks: Record<string, PartLook>
+}
+
+export interface PartLook {
+  visible: boolean
+  opacity: number
 }
 
 export interface Board {

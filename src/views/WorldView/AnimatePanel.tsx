@@ -4,17 +4,19 @@ import { Button } from '@/components/Button'
 import {
   CameraTrackIcon,
   ChevronRightIcon,
-  DownloadIcon,
   EyeIcon,
+  OpacityIcon,
   PlusIcon,
+  RecordIcon,
   TrashIcon,
 } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
+import { recordCameraFromView } from '@/hooks/useShortcuts'
+import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { assemblyParts, membersOf, type AssemblyPart } from '@/lib/graph'
-import { formatClock, stageDuration } from '@/lib/timeline'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
-import type { Project, Stage } from '@/types/project'
+import type { PartLook, Project, Stage } from '@/types/project'
 import { MemberRow } from './MemberRow'
 
 export interface AnimatePanelProps {
@@ -24,141 +26,275 @@ export interface AnimatePanelProps {
   session: WorldSession | null
 }
 
-/** One mesh inside an assembly input: it can get its own track, which
- *  moves it within the assembly. Draggable onto the timeline like a mesh. */
-function PartRow({
-  part,
-  hasTrack,
-  onAddTrack,
+/** "Has a track" dot, or "+" to create one. */
+function TrackButton({
+  tracked,
+  onCreate,
+  onOpen,
 }: {
-  part: AssemblyPart
-  hasTrack: boolean
-  onAddTrack: () => void
+  tracked: boolean
+  onCreate: () => void
+  onOpen: () => void
 }) {
+  return tracked ? (
+    <IconButton title="Animated — show its initial pose on the timeline" active onClick={onOpen}>
+      <RecordIcon size={9} />
+    </IconButton>
+  ) : (
+    <IconButton title="Create its track" onClick={onCreate}>
+      <PlusIcon size={13} />
+    </IconButton>
+  )
+}
+
+/** Opacity slider under a row (shared by parts; members have their own). */
+function OpacitySlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', part.key)}
-      title={part.mesh.name}
       style={{
-        cursor: 'grab',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--space-2)',
-        padding: '2px 0',
-        paddingLeft: part.depth * 22,
+        padding: '2px 4px 6px 26px',
       }}
     >
-      <IconButton title="Create its track" active={hasTrack} onClick={onAddTrack}>
-        <PlusIcon size={13} />
-      </IconButton>
-      {part.node.color && (
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            flex: 'none',
-            borderRadius: '50%',
-            background: part.node.color,
-          }}
-        />
-      )}
+      <input
+        type="range"
+        min={0.05}
+        max={1}
+        step={0.05}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ flex: 1, accentColor: 'var(--color-accent)' }}
+      />
       <span
+        className="text-muted"
         style={{
-          fontFamily: 'ui-monospace, monospace',
           fontSize: 10,
-          color: 'var(--color-accent-300)',
+          fontFamily: 'ui-monospace, monospace',
+          minWidth: 30,
+          textAlign: 'right',
         }}
       >
-        {part.mesh.ext.toUpperCase()}
-      </span>
-      <span className="text-muted" style={{ fontSize: 10 }}>
-        :
-      </span>
-      <span
-        style={{
-          flex: 1,
-          minWidth: 0,
-          fontSize: 11,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {part.mesh.name}
+        {Math.round(value * 100)}%
       </span>
     </div>
   )
 }
 
-export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelProps) {
-  const playing = useStore((s) => s.playing)
-  const playT = useStore((s) => s.playT)
-  const onAnimPlay = useStore((s) => s.onAnimPlay)
-  const onAnimReset = useStore((s) => s.onAnimReset)
-  const openVideoAsk = useStore((s) => s.openVideoAsk)
-  const addMeshTrack = useStore((s) => s.addMeshTrack)
-  const addCameraTrack = useStore((s) => s.addCameraTrack)
-  const onCamKill = useStore((s) => s.onCamKill)
-  const removeMember = useStore((s) => s.removeMember)
+/** A piece inside an assembly input — selectable, animatable (its track
+ *  moves it within the assembly), and shown / faded on its own. */
+function PartRow({
+  part,
+  look,
+  selected,
+  tracked,
+  onSelect,
+  onCreate,
+  onOpen,
+}: {
+  part: AssemblyPart
+  look: PartLook | undefined
+  selected: boolean
+  tracked: boolean
+  onSelect: () => void
+  onCreate: () => void
+  onOpen: () => void
+}) {
+  const opacityOpen = useStore((s) => s.opacityOpenId === part.key)
+  const toggleOpacityUI = useStore((s) => s.toggleOpacityUI)
+  const togglePartVisible = useStore((s) => s.togglePartVisible)
+  const setPartOpacity = useStore((s) => s.setPartOpacity)
+  const visible = look?.visible ?? true
+  const opacity = look?.opacity ?? 1
+  const name = part.mesh?.name ?? part.node.label ?? part.node.kind
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const toggleExpanded = (id: string) =>
-    setExpanded((prev) => {
+  return (
+    <div>
+      <div
+        className={'outline-row' + (selected ? ' outline-row--selected' : '')}
+        draggable
+        onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', part.key)}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest('button')) onSelect()
+        }}
+        title={name}
+        style={{ paddingLeft: 4 + part.depth * 16, opacity: visible ? 1 : 0.5 }}
+      >
+        <TrackButton tracked={tracked} onCreate={onCreate} onOpen={onOpen} />
+        {part.node.color && (
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              flex: 'none',
+              borderRadius: '50%',
+              background: part.node.color,
+            }}
+          />
+        )}
+        <span
+          style={{
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 10,
+            color: 'var(--color-accent-300)',
+          }}
+        >
+          {part.mesh ? part.mesh.ext.toUpperCase() : 'ASM'}
+        </span>
+        <span className="text-muted" style={{ fontSize: 10 }}>
+          :
+        </span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 11,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {name}
+        </span>
+        <IconButton
+          title={visible ? 'Hide' : 'Show'}
+          active={visible}
+          onClick={() => togglePartVisible(part.key)}
+        >
+          <EyeIcon size={13} />
+        </IconButton>
+        <IconButton
+          title={`Opacity ${Math.round(opacity * 100)}%`}
+          active={opacityOpen || opacity < 1}
+          onClick={() => toggleOpacityUI(part.key)}
+        >
+          <OpacityIcon size={13} />
+        </IconButton>
+      </div>
+      {opacityOpen && (
+        <OpacitySlider value={opacity} onChange={(v) => setPartOpacity(part.key, v)} />
+      )}
+    </div>
+  )
+}
+
+/** The animation camera's row: select it (in the viewport too), look
+ *  through it, shoot it from the current view, delete it. */
+function CameraRow({ stage, session }: { stage: Stage; session: WorldSession | null }) {
+  const worldSelId = useStore((s) => s.worldSelId)
+  const cameraView = useStore((s) => s.cameraView)
+  const selectWorldObject = useStore((s) => s.selectWorldObject)
+  const selectAction = useStore((s) => s.selectAction)
+  const setCameraView = useStore((s) => s.setCameraView)
+  const onCamKill = useStore((s) => s.onCamKill)
+  const camTrack = stage.tracks.find((t) => t.targetKind === 'camera')
+
+  const select = () => {
+    if (!camTrack) return
+    selectWorldObject(ANIM_CAMERA_KEY)
+    selectAction({ trackId: camTrack.id, actionId: 'init' })
+  }
+
+  return (
+    <div
+      className={'outline-row' + (worldSelId === ANIM_CAMERA_KEY ? ' outline-row--selected' : '')}
+      onClick={(e) => {
+        if (!(e.target as HTMLElement).closest('button')) select()
+      }}
+      title={camTrack ? 'The animation camera — an object in the world' : undefined}
+    >
+      {camTrack ? (
+        <IconButton
+          title="Animated — show its initial pose on the timeline"
+          active
+          onClick={select}
+        >
+          <RecordIcon size={9} />
+        </IconButton>
+      ) : (
+        <IconButton
+          title="Create the animation camera where you are looking from"
+          onClick={() => recordCameraFromView(session)}
+        >
+          <PlusIcon size={13} />
+        </IconButton>
+      )}
+      <CameraTrackIcon size={13} style={{ color: 'var(--color-neutral-400)' }} />
+      <span
+        style={{ flex: 1, fontSize: 11, color: camTrack ? undefined : 'var(--color-neutral-500)' }}
+      >
+        {camTrack ? 'Camera' : 'Camera (none yet)'}
+      </span>
+      {camTrack && (
+        <>
+          <IconButton
+            title="Shoot from here — the camera takes the view you're looking from (as an action at the playhead)"
+            onClick={() => recordCameraFromView(session)}
+          >
+            <EyeIcon size={13} />
+          </IconButton>
+          <Button
+            variant="ghost"
+            className={cameraView ? 'btn--on' : ''}
+            aria-pressed={cameraView}
+            title={cameraView ? 'Back to your own view' : 'Look through the animation camera'}
+            onClick={() => setCameraView(!cameraView)}
+            style={{ height: 22, minHeight: 22, padding: '0 7px', fontSize: 10, gap: 4 }}
+          >
+            <CameraTrackIcon size={11} /> {cameraView ? 'Viewing' : 'View'}
+          </Button>
+        </>
+      )}
+      {stage.camera && (
+        <IconButton title="Delete the camera" onClick={onCamKill}>
+          <TrashIcon size={13} />
+        </IconButton>
+      )}
+    </div>
+  )
+}
+
+/** The animate aside: the scene as a tree — the animation camera, every
+ *  input, and the pieces inside assembly inputs. Selecting a row selects
+ *  the piece in the viewport (and the other way round). */
+export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelProps) {
+  const worldSelId = useStore((s) => s.worldSelId)
+  const selectWorldObject = useStore((s) => s.selectWorldObject)
+  const selectAction = useStore((s) => s.selectAction)
+  const addMeshTrack = useStore((s) => s.addMeshTrack)
+  const removeMember = useStore((s) => s.removeMember)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
       const next = new Set(prev)
       if (!next.delete(id)) next.add(id)
       return next
     })
-
-  const camTrack = stage.tracks.find((t) => t.targetKind === 'camera')
-  const rows = membersOf(project, stageId)
-  const dur = stageDuration(stage)
+  const trackOf = (key: string) => stage.tracks.find((t) => t.nodeId === key)
+  const openTrack = (key: string) => {
+    const t = trackOf(key)
+    selectWorldObject(key)
+    if (t) selectAction({ trackId: t.id, actionId: 'init' })
+  }
 
   return (
-    <>
-      <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <Button variant="primary" style={{ flex: 1, fontSize: 11 }} onClick={onAnimPlay}>
-          {playing ? 'Pause' : 'Play'}
-        </Button>
-        <Button variant="secondary" style={{ fontSize: 11 }} onClick={onAnimReset}>
-          Reset
-        </Button>
-      </div>
-      <div
-        style={{
-          flex: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          marginTop: 'var(--space-2)',
-        }}
-      >
-        <Button
-          variant="secondary"
-          style={{
-            flex: 1,
-            fontSize: 11,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-          }}
-          onClick={openVideoAsk}
-        >
-          <DownloadIcon size={14} />
-          <span>Download</span>
-        </Button>
-      </div>
-      <div
-        className="text-muted"
-        style={{
-          flex: 'none',
-          fontSize: 11,
-          fontFamily: 'ui-monospace, monospace',
-          marginTop: 'var(--space-2)',
-        }}
-      >
-        {formatClock(playT)} / {formatClock(dur)}
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2)',
+      }}
+    >
+      <div style={{ flex: 'none' }}>
+        <div className="tl-section-title">Scene</div>
+        <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5, marginTop: 4 }}>
+          Click a piece (here or in the viewport), move it with the gizmo, then <b>Record pose</b>{' '}
+          (K). Esc selects the assembly holding it.
+        </div>
       </div>
 
       <div
@@ -166,117 +302,67 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
           flex: 1,
           minHeight: 0,
           overflow: 'auto',
-          marginTop: 'var(--space-3)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
+          gap: 1,
         }}
       >
-        <div
-          style={{
-            height: 34,
-            flex: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-          }}
-        >
-          <div
-            style={{
-              width: 18,
-              height: 18,
-              flex: 'none',
-              display: 'grid',
-              placeItems: 'center',
-              borderRadius: 2,
-              background: 'var(--color-neutral-800)',
-              color: 'var(--color-neutral-300)',
-            }}
-          >
-            <CameraTrackIcon size={11} />
-          </div>
-          <span
-            style={{
-              fontFamily: 'ui-monospace, monospace',
-              fontSize: 10,
-              color: 'var(--color-accent-300)',
-            }}
-          >
-            CAM
-          </span>
-          <span className="text-muted" style={{ fontSize: 10 }}>
-            :
-          </span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 11 }}>Camera</span>
-          {!camTrack && (
-            <IconButton
-              title="Create the camera track"
-              onClick={() => addCameraTrack(session?.getCameraPose())}
-            >
-              <PlusIcon size={13} />
-            </IconButton>
-          )}
-          <IconButton
-            title="Show / hide the camera body"
-            active={!!stage.camera}
-            onClick={() => stage.camera && session?.setCameraPose(stage.camera.pose)}
-          >
-            <EyeIcon size={13} />
-          </IconButton>
-          <IconButton title="Delete the camera" onClick={onCamKill}>
-            <TrashIcon size={13} />
-          </IconButton>
-        </div>
+        <CameraRow stage={stage} session={session} />
 
-        {rows.map((row) => {
+        {membersOf(project, stageId).map((row) => {
           const member = stage.members.find((m) => m.nodeId === row.node.id)
           if (!member) return null
-          const hasTrack = stage.tracks.some((t) => t.nodeId === row.node.id)
+          const key = row.node.id
           const isAsm = !row.mesh
-          const open = expanded.has(row.node.id)
+          const open = isAsm && !collapsed.has(key)
           return (
-            <div key={row.node.id}>
+            <div key={key}>
               <MemberRow
                 member={member}
                 input={row}
-                onKill={() => removeMember(row.node.id)}
+                selected={worldSelId === key}
+                onSelect={() => selectWorldObject(key)}
+                onKill={() => removeMember(key)}
                 leading={
                   <>
-                    {isAsm && (
+                    {isAsm ? (
                       <IconButton
-                        title={open ? 'Hide its meshes' : 'Show its meshes'}
-                        onClick={() => toggleExpanded(row.node.id)}
+                        title={open ? 'Collapse' : 'Show its pieces'}
+                        onClick={() => toggle(key)}
                       >
                         <ChevronRightIcon
                           size={11}
                           style={{ transform: open ? 'rotate(90deg)' : undefined }}
                         />
                       </IconButton>
+                    ) : (
+                      <span style={{ width: 20, flex: 'none' }} />
                     )}
-                    <IconButton
-                      title={isAsm ? 'Create a track for the whole assembly' : 'Create its track'}
-                      active={hasTrack}
-                      onClick={() => addMeshTrack(row.node.id)}
-                    >
-                      <PlusIcon size={13} />
-                    </IconButton>
+                    <TrackButton
+                      tracked={!!trackOf(key)}
+                      onCreate={() => addMeshTrack(key)}
+                      onOpen={() => openTrack(key)}
+                    />
                   </>
                 }
               />
-              {isAsm &&
-                open &&
-                assemblyParts(project, row.node.id).map((part) => (
+              {open &&
+                assemblyParts(project, key).map((part) => (
                   <PartRow
                     key={part.key}
                     part={part}
-                    hasTrack={stage.tracks.some((t) => t.nodeId === part.key)}
-                    onAddTrack={() => addMeshTrack(part.key)}
+                    look={stage.partLooks?.[part.key]}
+                    selected={worldSelId === part.key}
+                    tracked={!!trackOf(part.key)}
+                    onSelect={() => selectWorldObject(part.key)}
+                    onCreate={() => addMeshTrack(part.key)}
+                    onOpen={() => openTrack(part.key)}
                   />
                 ))}
             </div>
           )
         })}
       </div>
-    </>
+    </div>
   )
 }

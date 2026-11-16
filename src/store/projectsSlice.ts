@@ -1,7 +1,9 @@
+import { isTiny, recommendedFactor } from '@/lib/meshScale'
 import { normalizeMesh, normalizeProject } from '@/lib/migrations'
 import { findProject } from './helpers'
 import type { Get, ProjectsActions, ProjectsState, Set } from './types'
 import { DEFAULT_MESH_COLOR } from '@/lib/constants'
+import type { Vec3 } from '@/types/project'
 
 const COLOR_PRESETS = ['#9a97ab', '#e07a5f', '#81b29a', '#f2cc8f', '#6a8fe0', '#c9a0dc']
 export { COLOR_PRESETS }
@@ -10,6 +12,7 @@ export const initialProjectsState: ProjectsState = {
   projects: [],
   confirm: null,
   colorEdit: null,
+  scaleEdit: null,
 }
 
 export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
@@ -123,5 +126,69 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
         state.colorEdit = null
       })
     },
+
+    async openScaleEditor(nodeId, prompted = false) {
+      const size = await ensureMeshSize(get, set, nodeId)
+      const node = currentNode(get, nodeId)
+      if (!size || !node) return
+      // an automatic prompt only for pieces that are actually tiny
+      if (prompted && !isTiny(size)) return
+      set((s) => {
+        s.scaleEdit = {
+          nodeId,
+          size,
+          factor: prompted ? recommendedFactor(size) : node.scale,
+          prompted,
+        }
+      })
+    },
+    setScaleDraft(factor) {
+      set((state) => {
+        if (state.scaleEdit && factor > 0) state.scaleEdit.factor = factor
+      })
+    },
+    cancelScaleEditor() {
+      set((state) => {
+        state.scaleEdit = null
+      })
+    },
+    applyScaleEditor() {
+      const { scaleEdit, pid } = get()
+      if (!scaleEdit) return
+      set((state) => {
+        const node = findProject(state, pid)?.board.nodes.find((n) => n.id === scaleEdit.nodeId)
+        if (node) node.scale = scaleEdit.factor
+        state.scaleEdit = null
+      })
+    },
+  }
+}
+
+function currentNode(get: Get, nodeId: string) {
+  const s = get()
+  return s.projects.find((p) => p.id === s.pid)?.board.nodes.find((n) => n.id === nodeId)
+}
+
+/** The node's file size in native units — measured once per file (three.js
+ *  loads on demand, it's not part of the board's bundle) and cached on the
+ *  library mesh. */
+async function ensureMeshSize(get: Get, set: Set, nodeId: string): Promise<Vec3 | null> {
+  const s = get()
+  const project = s.projects.find((p) => p.id === s.pid)
+  const node = project?.board.nodes.find((n) => n.id === nodeId)
+  const mesh = node && project?.meshes.find((m) => m.id === node.meshId)
+  if (!project || !mesh) return null
+  if (mesh.size) return mesh.size
+  try {
+    const { measureMesh } = await import('@/lib/three/buildMesh')
+    const size = await measureMesh(mesh)
+    set((state) => {
+      const m = findProject(state, project.id)?.meshes.find((x) => x.id === mesh.id)
+      if (m) m.size = size
+    })
+    return size
+  } catch (e) {
+    console.error('[mesh-studio] could not measure mesh:', e)
+    return null
   }
 }

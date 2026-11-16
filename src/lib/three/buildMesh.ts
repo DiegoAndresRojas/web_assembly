@@ -13,7 +13,7 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js'
 
 import { DEFAULT_MESH_COLOR } from '@/lib/constants'
 import { clamp, num } from '@/lib/utils'
-import type { MeshRecord, Pose } from '@/types/project'
+import type { MeshRecord, Pose, Vec3 } from '@/types/project'
 
 export type DownloadFormat = 'glb' | 'obj' | 'stl'
 
@@ -97,6 +97,16 @@ export function buildMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
   return Promise.reject(new Error('unsupported mesh format: ' + ext))
 }
 
+/** Bounding-box size of a mesh file in its native units. */
+export async function measureMesh(meshRecord: MeshRecord): Promise<Vec3> {
+  const obj = await buildMesh(meshRecord)
+  const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3())
+  obj.traverse((child) => {
+    if (child instanceof THREE.Mesh) child.geometry.dispose()
+  })
+  return { x: size.x, y: size.y, z: size.z }
+}
+
 export function applyPose(object3d: THREE.Object3D, pose: Pose): void {
   object3d.position.set(pose.pos.x, pose.pos.y, pose.pos.z)
   object3d.rotation.set(
@@ -105,6 +115,14 @@ export function applyPose(object3d: THREE.Object3D, pose: Pose): void {
     THREE.MathUtils.degToRad(pose.rot.z),
     'XYZ',
   )
+}
+
+/** The object's local pose (relative to its parent), inverse of applyPose. */
+export function readPose(object3d: THREE.Object3D): Pose {
+  const e = new THREE.Euler().setFromQuaternion(object3d.quaternion, 'XYZ')
+  const d = THREE.MathUtils.radToDeg
+  const p = object3d.position
+  return { pos: { x: p.x, y: p.y, z: p.z }, rot: { x: d(e.x), y: d(e.y), z: d(e.z) } }
 }
 
 interface OwnMaterialUserData {

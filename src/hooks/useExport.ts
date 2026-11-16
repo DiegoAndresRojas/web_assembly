@@ -9,7 +9,7 @@ import { captureFrames, recordWebm } from '@/lib/three/recorder'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { buildZip } from '@/lib/zip'
 import { useStore } from '@/store'
-import { applyStageTime } from './useWorldSession'
+import { applyStageAt } from './useWorldSession'
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
@@ -49,7 +49,7 @@ export function useExport(session: WorldSession | null) {
     const project = projects.find((p) => p.id === pid)
     const stage = project && aid ? project.stages[aid] : null
     const duration = stage ? stageDuration(stage) : 0
-    if (!stage || duration <= 0) {
+    if (!project || !aid || !stage || duration <= 0) {
       state.setExportError('Nothing is animated yet.')
       return
     }
@@ -60,19 +60,33 @@ export function useExport(session: WorldSession | null) {
     state.setExportBusy(true)
     state.setExportError(null)
     const fps = 30
-    const canvas = session.renderer.domElement
+    // always a 16:9 video (1280×720), whatever the viewport's shape
+    const canvas = session.beginExport(1280, 720) ?? session.renderer.domElement
+    // shot through the animation camera (its own object in the world) when
+    // the stage animates one, else through the working view
     const renderFrame = (t: number) => {
-      applyStageTime(session, stage, t)
-      session.render()
+      const cam = applyStageAt(session, project, aid, t)
+      session.setAnimCamera(cam)
+      if (!cam || !session.renderAnimCamera()) session.render()
+    }
+    // the render loop keeps drawing between captured frames (and a WebM
+    // records whatever is on the canvas) — have it draw the same shot
+    session.setLookThrough(true)
+    const restore = () => {
+      const s = useStore.getState()
+      session.endExport()
+      session.setAnimCamera(applyStageAt(session, project, aid, s.playT))
+      session.setLookThrough(s.cameraView)
     }
     const done = (blob: Blob, filename: string) => {
       triggerDownload(blob, filename)
       const s = useStore.getState()
       s.setExportBusy(false)
       s.closeVideoAsk()
-      applyStageTime(session, stage, s.playT)
+      restore()
     }
     const fail = (err: unknown) => {
+      restore()
       useStore.getState().setExportBusy(false)
       useStore.getState().setExportError(err instanceof Error ? err.message : String(err))
     }

@@ -8,8 +8,7 @@ export const initialNavigationState: NavigationState = {
   wmode: 'assembly',
 }
 
-function wmodeForKind(kind: 'mesh' | 'assembly' | 'observer' | 'animation'): WorldMode {
-  if (kind === 'observer') return 'observer'
+function wmodeForKind(kind: 'mesh' | 'assembly' | 'animation'): WorldMode {
   if (kind === 'animation') return 'animate'
   return 'assembly'
 }
@@ -42,7 +41,13 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.wmode = node ? wmodeForKind(node.kind) : 'assembly'
         state.kpOn = false
         state.hint = 'Loading…'
+        state.worldSelId = null
+        state.playing = false
+        state.playT = 0
+        state.selection = null
       })
+      // undo history belongs to the stage being left
+      get().clearHistory()
       // Creates the stage record (if this is the first time it's opened)
       // and makes sure every mesh wired in via board edges has a member
       // row — without this, WorldView has nothing to render.

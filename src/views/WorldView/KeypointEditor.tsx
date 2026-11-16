@@ -23,8 +23,8 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
   const canRedo = useStore((s) => s.canRedo)
   const toggleKp = useStore((s) => s.toggleKp)
   const setKpMode = useStore((s) => s.setKpMode)
-  const undoLink = useStore((s) => s.undoLink)
-  const redoLink = useStore((s) => s.redoLink)
+  const undo = useStore((s) => s.undo)
+  const redo = useStore((s) => s.redo)
   const openKpEdit = useStore((s) => s.openKpEdit)
   const closeKpEdit = useStore((s) => s.closeKpEdit)
   const cancelKpEdit = useStore((s) => s.cancelKpEdit)
@@ -44,19 +44,25 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
       <h6 style={{ flex: 'none', margin: 0, fontSize: 11, color: 'var(--color-neutral-400)' }}>
         Keypoints
       </h6>
-      <label
-        style={{
-          flex: 'none',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          fontSize: 12,
-          cursor: 'pointer',
-        }}
+      <Button
+        variant="secondary"
+        className={kpOn ? 'btn--on' : ''}
+        aria-pressed={kpOn}
+        title={kpOn ? 'Stop picking keypoints' : 'Click points on the meshes to link them'}
+        onClick={() => toggleKp(!kpOn)}
+        style={{ flex: 'none', fontSize: 12, justifyContent: 'flex-start', gap: 8 }}
       >
-        <input type="checkbox" checked={kpOn} onChange={(e) => toggleKp(e.target.checked)} />
-        <span>Select keypoints</span>
-      </label>
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: kpOn ? '#fff' : 'var(--color-neutral-500)',
+            boxShadow: kpOn ? '0 0 0 3px rgba(255, 255, 255, 0.25)' : undefined,
+          }}
+        />
+        {kpOn ? 'Picking keypoints' : 'Select keypoints'}
+      </Button>
 
       <div style={{ marginTop: 'var(--space-3)' }}>
         <Segmented name="kpmode" value={kpMode} options={KP_MODES} onChange={setKpMode} />
@@ -75,7 +81,7 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
           variant="secondary"
           style={{ flex: 1, fontSize: 11 }}
           disabled={!canUndo}
-          onClick={undoLink}
+          onClick={undo}
         >
           Undo
         </Button>
@@ -83,7 +89,7 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
           variant="secondary"
           style={{ flex: 1, fontSize: 11 }}
           disabled={!canRedo}
-          onClick={redoLink}
+          onClick={redo}
         >
           Redo
         </Button>
@@ -266,21 +272,17 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
           marginTop: 'var(--space-4)',
         }}
       >
-        <Button
-          variant="primary"
-          style={{ flex: 1, fontSize: 11 }}
-          disabled={stage.links.length === 0 || !!stage.union}
-          onClick={doUnion}
-        >
-          Union
-        </Button>
+        {/* one toggle: pressed while the pieces are united */}
         <Button
           variant="secondary"
-          style={{ flex: 1, fontSize: 11 }}
-          disabled={!stage.union}
-          onClick={undoUnion}
+          className={stage.union ? 'btn--on' : ''}
+          aria-pressed={!!stage.union}
+          style={{ flex: 2, fontSize: 11 }}
+          disabled={!stage.union && stage.links.length === 0}
+          title={stage.union ? 'United — click to cancel the union' : 'Unite the linked pieces'}
+          onClick={stage.union ? undoUnion : doUnion}
         >
-          Cancel union
+          {stage.union ? '✓ United' : 'Union'}
         </Button>
         <Button
           variant="secondary"

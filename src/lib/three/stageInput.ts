@@ -27,12 +27,14 @@ async function buildStageOutput(
     membersOf(project, stageId).map(async (row) => {
       // a stage never opened yet has no member records: its inputs sit at
       // the default (identity) pose, which is also how opening it lays them out
-      const member: Partial<StageMember> = stage?.members.find((m) => m.nodeId === row.node.id) ?? {}
+      const member: Partial<StageMember> =
+        stage?.members.find((m) => m.nodeId === row.node.id) ?? {}
       if (member.visible === false) return null
       const obj = row.mesh
         ? await buildMesh(row.mesh)
         : await buildStageOutput(project, row.node.id, nextPath)
       applyPose(obj, member.pose ?? IDENTITY)
+      if (row.mesh) obj.scale.setScalar(row.node.scale ?? 1)
       applyColor(obj, member.color ?? row.node.color)
       obj.userData.msNodeId = row.node.id
       if (member.opacity !== undefined) applyOpacity(obj, member.opacity)

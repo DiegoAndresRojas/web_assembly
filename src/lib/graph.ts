@@ -65,7 +65,8 @@ export const PART_SEP = '/'
 export interface AssemblyPart {
   key: string
   node: BoardNode
-  mesh: MeshRecord
+  /** The part's file, or null for an assembly nested inside the input. */
+  mesh: MeshRecord | null
   /** Nesting level below the assembly input (1 = direct part). */
   depth: number
   /** The part's assembled pose, local to the assembly that holds it. */
@@ -74,9 +75,9 @@ export interface AssemblyPart {
 
 const IDENTITY: Pose = { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } }
 
-/** Every visible mesh inside an assembly input, recursing into nested
- *  assemblies — each one individually addressable (and animatable) by its
- *  part key. */
+/** Every visible piece inside an assembly input, depth-first — meshes and
+ *  nested assemblies (followed by their own pieces) — each individually
+ *  addressable, selectable and animatable by its part key. */
 export function assemblyParts(
   project: Project | null,
   asmNodeId: string,
@@ -85,15 +86,48 @@ export function assemblyParts(
   path: Set<string> = new Set(),
 ): AssemblyPart[] {
   if (!project || path.has(asmNodeId)) return []
+  // top-level calls are cached per project object — the store never mutates
+  // one in place (immer), and playback asks for these every frame
+  const top = prefix === asmNodeId && depth === 1 && path.size === 0
+  if (top) {
+    const hit = partsCache.get(project)?.get(asmNodeId)
+    if (hit) return hit
+  }
+  const parts = collectParts(project, asmNodeId, prefix, depth, path)
+  if (top) {
+    let byAsm = partsCache.get(project)
+    if (!byAsm) partsCache.set(project, (byAsm = new Map()))
+    byAsm.set(asmNodeId, parts)
+  }
+  return parts
+}
+
+const partsCache = new WeakMap<Project, Map<string, AssemblyPart[]>>()
+
+function collectParts(
+  project: Project,
+  asmNodeId: string,
+  prefix: string,
+  depth: number,
+  path: Set<string>,
+): AssemblyPart[] {
   const nextPath = new Set(path).add(asmNodeId)
   const stage = project.stages[asmNodeId]
   return membersOf(project, asmNodeId).flatMap((row) => {
     const member = stage?.members.find((m) => m.nodeId === row.node.id)
     if (member?.visible === false) return []
     const key = prefix + PART_SEP + row.node.id
-    if (!row.mesh) return assemblyParts(project, row.node.id, key, depth + 1, nextPath)
-    return [{ key, node: row.node, mesh: row.mesh, depth, pose: member?.pose ?? IDENTITY }]
+    const self = { key, node: row.node, mesh: row.mesh, depth, pose: member?.pose ?? IDENTITY }
+    if (row.mesh) return [self]
+    return [self, ...assemblyParts(project, row.node.id, key, depth + 1, nextPath)]
   })
+}
+
+/** The key one level up (`asm/inner/mesh` → `asm/inner`), or null for a
+ *  top-level key. An observer prefix (`obsId::`) is kept. */
+export function parentKey(key: string): string | null {
+  const i = key.lastIndexOf(PART_SEP)
+  return i < 0 ? null : key.slice(0, i)
 }
 
 /** The part a key addresses, or null for a plain (top-level) node id. */
@@ -101,6 +135,15 @@ export function partForKey(project: Project | null, key: string): AssemblyPart |
   const top = key.split(PART_SEP)[0]
   if (top === key) return null
   return assemblyParts(project, top).find((p) => p.key === key) ?? null
+}
+
+/** A piece's connector pose — where the assembly put it, before any
+ *  animation: the stage member's pose for a top-level input, the assembled
+ *  pose for a part inside an assembly input. */
+export function restPoseOf(project: Project | null, stageId: string, key: string): Pose | null {
+  const part = partForKey(project, key)
+  if (part) return part.pose
+  return project?.stages[stageId]?.members.find((m) => m.nodeId === key)?.pose ?? null
 }
 
 /** Whether a node id / part key refers to `nodeId` anywhere along it. */
@@ -118,17 +161,53 @@ export function inputLabel(project: Project | null, nodeId: string | null): stri
   return node.label ?? node.kind
 }
 
-/** Stages an observer shows: the ones toggled on in its panel plus every
- *  stage wired into it on the board. */
+/** What an observer plays: the animations wired into it on the board —
+ *  only animations (another observer wired in is an earlier step). */
 export function observedStageIds(project: Project | null, stageNodeId: string): string[] {
   if (!project) return []
-  const ids = [...(project.stages[stageNodeId]?.observing ?? [])]
+  const ids: string[] = []
   for (const e of project.board.edges) {
     if (e.to !== stageNodeId) continue
-    const from = nodeById(project, e.from)
-    if (from && from.kind !== 'mesh' && !ids.includes(from.id)) ids.push(from.id)
+    if (nodeById(project, e.from)?.kind === 'animation' && !ids.includes(e.from)) ids.push(e.from)
   }
   return ids
+}
+
+/** The sequential steps of an observer chain (OB1 → OB2 → OB3), in chain
+ *  order. A chain is one entity: opening any of its observers plays all of
+ *  its steps. */
+export function observerSteps(project: Project | null, observerId: string): string[] {
+  if (!project) return [observerId]
+  const isObs = (id: string) => nodeById(project, id)?.kind === 'observer'
+  const links = project.board.edges.filter((e) => isObs(e.from) && isObs(e.to))
+  // every observer connected to this one, either way
+  const chain = new Set([observerId])
+  for (let grew = true; grew;) {
+    grew = false
+    for (const e of links) {
+      if (chain.has(e.from) !== chain.has(e.to)) {
+        chain.add(e.from)
+        chain.add(e.to)
+        grew = true
+      }
+    }
+  }
+  // earliest first: an observer comes after everything wired into it
+  const out: string[] = []
+  const visit = (id: string, path: Set<string>) => {
+    if (path.has(id) || out.includes(id)) return
+    const next = new Set(path).add(id)
+    for (const e of links) if (e.to === id && chain.has(e.from)) visit(e.from, next)
+    out.push(id)
+  }
+  for (const n of project.board.nodes) if (chain.has(n.id)) visit(n.id, new Set())
+  return out
+}
+
+/** Object-key prefix for a stage observed in one step — each step brings
+ *  its own pieces, even when two steps observe the same stage. */
+export function stepPrefix(stepId: string, stageId: string): string {
+  return stepId + '>' + stageId + '::'
 }
 
 /** Whether `toId` is reachable from `fromId` following board edges. */
@@ -147,8 +226,11 @@ function reaches(project: Project, fromId: string, toId: string): boolean {
 
 /** Which stage kinds may take another stage's output as input. */
 const STAGE_OUTPUTS: Record<string, NodeKind[]> = {
-  assembly: ['assembly', 'animation', 'observer'],
+  // (observers play animations only)
+  assembly: ['assembly', 'animation'],
   animation: ['observer'],
+  // observer → observer chains sequential steps (see observerSteps)
+  observer: ['observer'],
 }
 
 /** The directed edge to create when the user links `a` to `b` (dragged
@@ -166,6 +248,8 @@ export function edgeFor(
   const bMesh = b.kind === 'mesh'
   if (aMesh && bMesh) return null
   if (aMesh || bMesh) {
+    // an observer shows stages (animations / assemblies), never loose meshes
+    if (a.kind === 'observer' || b.kind === 'observer') return null
     return aMesh ? { from: a.id, to: b.id } : { from: b.id, to: a.id }
   }
   const allowed = (from: BoardNode, to: BoardNode) =>

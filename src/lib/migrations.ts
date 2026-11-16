@@ -6,9 +6,11 @@ import type {
   Board,
   BoardEdge,
   BoardNode,
+  Ease,
   KeypointLink,
   MeshRecord,
   NodeKind,
+  PartLook,
   Pose,
   Project,
   Stage,
@@ -18,9 +20,19 @@ import type {
   Vec3,
 } from '@/types/project'
 
-export const CURRENT_VERSION = 1
+// 2: per-node color (handed down from the library mesh) + action easing.
+// 3: per-node scale + measured mesh size.
+// 4: per-part visibility / opacity in stages (partLooks).
+// 5: observers show only what the board wires in (manual "observing" dropped).
+// 6: mesh → observer edges dropped (observers take stages only; those edges
+//    came from an over-eager drop-to-link on the board).
+// 7: assembly → observer edges dropped (observers play animations only).
+// zustand's persist only calls `migrate` when the stored version differs,
+// so any change normalizeProject() must apply to old saves needs a bump.
+export const CURRENT_VERSION = 7
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'observer', 'animation']
+export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
 
 function asVec3(v: unknown): Vec3 {
   const o = (v && typeof v === 'object' ? (v as Record<string, unknown>) : {}) as Record<
@@ -40,6 +52,7 @@ export function normalizeMesh(raw: unknown): MeshRecord | null {
     origin: 'original',
     data: typeof m.data === 'string' ? m.data : null,
     color: typeof m.color === 'string' ? m.color : null,
+    size: m.size && typeof m.size === 'object' ? asVec3(m.size) : null,
   }
 }
 
@@ -56,6 +69,7 @@ export function normalizeNode(raw: unknown): BoardNode | null {
     meshId: kind === 'mesh' ? (typeof n.meshId === 'string' ? n.meshId : null) : null,
     label: typeof n.label === 'string' ? n.label : null,
     color: typeof n.color === 'string' ? n.color : null,
+    scale: num(n.scale, 1) > 0 ? num(n.scale, 1) : 1,
   }
 }
 
@@ -118,6 +132,8 @@ export function normalizeAction(raw: unknown): TimelineAction | null {
     toPose: normalizePose(a.toPose),
     fromLinked: a.fromLinked !== false,
     toLinked: !!a.toLinked,
+    // ease-in-out is the smoothstep every action used before easing existed
+    ease: EASES.includes(a.ease as Ease) ? (a.ease as Ease) : 'easeInOut',
     start: num(a.start, 0),
     duration: Math.max(0.1, num(a.duration, 1)),
   }
@@ -137,6 +153,17 @@ export function normalizeTrack(raw: unknown): Track | null {
     initPose: normalizePose(t.initPose),
     actions,
   }
+}
+
+function normalizePartLooks(raw: unknown): Record<string, PartLook> {
+  const out: Record<string, PartLook> = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object') continue
+    const l = v as Record<string, unknown>
+    out[key] = { visible: l.visible !== false, opacity: clamp(num(l.opacity, 1), 0.05, 1) }
+  }
+  return out
 }
 
 export function normalizeStage(raw: unknown): Stage {
@@ -164,10 +191,8 @@ export function normalizeStage(raw: unknown): Stage {
     tracks: Array.isArray(s.tracks)
       ? s.tracks.map(normalizeTrack).filter((t): t is Track => !!t)
       : [],
-    observing: Array.isArray(s.observing)
-      ? s.observing.filter((x): x is string => typeof x === 'string')
-      : [],
     union: s.union && typeof s.union === 'object' ? (s.union as { at: number }) : null,
+    partLooks: normalizePartLooks(s.partLooks),
   }
 }
 
@@ -184,7 +209,17 @@ export function normalizeProject(raw: unknown): Project | null {
   const edges = Array.isArray(boardRaw.edges)
     ? boardRaw.edges.map(normalizeEdge).filter((e): e is BoardEdge => !!e)
     : []
-  const board: Board = { nodes, edges }
+  const kindOf = (id: string) => nodes.find((n) => n.id === id)?.kind
+  const board: Board = {
+    nodes,
+    // an observer takes animations (and observers, as steps) only
+    edges: edges.filter(
+      (e) =>
+        kindOf(e.to) !== 'observer' ||
+        kindOf(e.from) === 'animation' ||
+        kindOf(e.from) === 'observer',
+    ),
+  }
 
   const stages: Record<string, Stage> = {}
   const rawStages = (p.stages && typeof p.stages === 'object' ? p.stages : {}) as Record<

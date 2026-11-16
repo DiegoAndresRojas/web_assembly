@@ -1,9 +1,7 @@
 import { useCallback, useState } from 'react'
 
-import { Button } from '@/components/Button'
 import { BackIcon } from '@/components/icons'
-import { firstAnimatedObserved } from '@/hooks/useWorldSession'
-import { formatClock, stageDuration } from '@/lib/timeline'
+import { useShortcuts } from '@/hooks/useShortcuts'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import { TimelineDock } from '@/views/TimelineView/TimelineDock'
@@ -22,21 +20,14 @@ export function WorldView({ stageId }: { stageId: string }) {
   const project = useStore((s) => s.projects.find((p) => p.id === s.pid))
   const node = project?.board.nodes.find((n) => n.id === stageId)
   const wmode = useStore((s) => s.wmode)
-  const playing = useStore((s) => s.playing)
-  const playT = useStore((s) => s.playT)
-  const onObsPlay = useStore((s) => s.onObsPlay)
-  const onObsReset = useStore((s) => s.onObsReset)
   const backToBoard = useStore((s) => s.backToBoard)
 
   const onSession = useCallback((s: WorldSession | null) => setSession(s), [])
+  useShortcuts(session)
 
   if (!project || !node) return null
   const stage = project.stages[stageId]
   if (!stage) return null
-
-  const observedTarget = wmode === 'observer' ? firstAnimatedObserved(project, stageId) : null
-  const observedAnim = !!observedTarget
-  const observedDur = observedTarget ? stageDuration(observedTarget.stage) : 0
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -68,37 +59,6 @@ export function WorldView({ stageId }: { stageId: string }) {
             {project.name} / {node.label ?? node.kind}
           </div>
 
-          {observedAnim && (
-            <>
-              <div
-                style={{
-                  flex: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-2)',
-                }}
-              >
-                <Button variant="primary" style={{ flex: 1, fontSize: 11 }} onClick={onObsPlay}>
-                  {playing ? 'Pause' : 'Play'}
-                </Button>
-                <Button variant="secondary" style={{ fontSize: 11 }} onClick={onObsReset}>
-                  Reset
-                </Button>
-              </div>
-              <div
-                className="text-muted"
-                style={{
-                  flex: 'none',
-                  fontSize: 11,
-                  fontFamily: 'ui-monospace, monospace',
-                  marginTop: 'var(--space-2)',
-                }}
-              >
-                {formatClock(playT)} / {formatClock(observedDur)}
-              </div>
-            </>
-          )}
-
           {wmode === 'animate' && (
             <AnimatePanel project={project} stageId={stageId} stage={stage} session={session} />
           )}
@@ -111,7 +71,9 @@ export function WorldView({ stageId }: { stageId: string }) {
         <WorldViewport stageId={stageId} onSession={onSession} />
       </div>
 
-      {wmode === 'animate' && <TimelineDock project={project} stage={stage} session={session} />}
+      {wmode === 'animate' && (
+        <TimelineDock project={project} stageId={stageId} stage={stage} session={session} />
+      )}
 
       <DownloadDialog session={session} />
       <VideoExportDialog session={session} />

@@ -47,6 +47,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const cancelLinking = useStore((s) => s.cancelLinking)
   const linking = useStore((s) => s.linking)
   const dropMeshOnBoard = useStore((s) => s.dropMeshOnBoard)
+  const openScaleEditor = useStore((s) => s.openScaleEditor)
   const dropStageOnBoard = useStore((s) => s.dropStageOnBoard)
   const openColorEditor = useStore((s) => s.openColorEditor)
   const openStage = useStore((s) => s.openStage)
@@ -159,7 +160,9 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
               }
             }}
             onPointerUp={() => {
-              if (dragRef.current) linkIfDropped(dragRef.current.nodeId)
+              // only a real drag-and-drop links; a click never does
+              const d = dragRef.current
+              if (d && Math.hypot(node.x - d.x0, node.y - d.y0) > 2) linkIfDropped(d.nodeId)
               dragRef.current = null
             }}
             onPointerEnter={() => hoverNode(node.id)}
@@ -174,6 +177,10 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             onColor={(e) => {
               e.stopPropagation()
               openColorEditor(node.id)
+            }}
+            onScale={(e) => {
+              e.stopPropagation()
+              void openScaleEditor(node.id)
             }}
             onLinkStart={(e) => {
               e.stopPropagation()

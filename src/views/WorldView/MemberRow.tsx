@@ -11,12 +11,24 @@ export interface MemberRowProps {
   draggable?: boolean
   leading?: ReactNode
   onKill: () => void
+  /** Selectable rows (the animate scene list) highlight and report clicks
+   *  outside their buttons. */
+  selected?: boolean
+  onSelect?: () => void
 }
 
-/** One row in the assembly "Linked meshes" list or the animate "Meshes"
- *  list: eye/opacity/kill controls shared by both. An upstream assembly
- *  input shows as "ASM" with its stage label. */
-export function MemberRow({ member, input, draggable = true, leading, onKill }: MemberRowProps) {
+/** One row in the assembly "Linked meshes" list or the animate scene list:
+ *  eye/opacity/kill controls shared by both. An upstream assembly input
+ *  shows as "ASM" with its stage label. */
+export function MemberRow({
+  member,
+  input,
+  draggable = true,
+  leading,
+  onKill,
+  selected = false,
+  onSelect,
+}: MemberRowProps) {
   const name = input.mesh?.name ?? input.node.label ?? input.node.kind
   const tag = input.mesh ? input.mesh.ext.toUpperCase() : 'ASM'
   const opacityOpenId = useStore((s) => s.opacityOpenId)
@@ -28,15 +40,20 @@ export function MemberRow({ member, input, draggable = true, leading, onKill }: 
   return (
     <div>
       <div
+        className={onSelect ? 'outline-row' + (selected ? ' outline-row--selected' : '') : undefined}
         draggable={draggable}
         onDragStart={(e) => e.dataTransfer.setData('text/ms-node-id', member.nodeId)}
+        onClick={(e) => {
+          if (onSelect && !(e.target as HTMLElement).closest('button')) onSelect()
+        }}
         title={name}
         style={{
-          cursor: 'grab',
+          cursor: onSelect ? 'pointer' : 'grab',
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-2)',
-          padding: '2px 0',
+          padding: onSelect ? undefined : '2px 0',
+          opacity: member.visible ? 1 : 0.5,
         }}
       >
         {leading}
@@ -75,15 +92,15 @@ export function MemberRow({ member, input, draggable = true, leading, onKill }: 
           {name}
         </span>
         <IconButton
-          title="Show / hide"
+          title={member.visible ? 'Hide' : 'Show'}
           active={member.visible}
           onClick={() => toggleMemberVisible(member.nodeId)}
         >
           <EyeIcon size={13} />
         </IconButton>
         <IconButton
-          title="Opacity"
-          active={opacityOpen}
+          title={`Opacity ${Math.round(member.opacity * 100)}%`}
+          active={opacityOpen || member.opacity < 1}
           onClick={() => toggleOpacityUI(member.nodeId)}
         >
           <OpacityIcon size={13} />

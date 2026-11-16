@@ -8,9 +8,10 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
-import { applyPose } from './buildMesh'
+import { applyPose, readPose } from './buildMesh'
+import { ANIM_ASPECT, AnimCameraRig } from './animCameraRig'
 import { snapIntersection, type SnapMode } from './surfaceSnap'
-import { KP_POINT_COLOR } from '@/lib/constants'
+import { ANIM_CAMERA_KEY, KP_POINT_COLOR } from '@/lib/constants'
 import { frameAt } from '@/lib/keypoints'
 import type { Pose, Vec3 } from '@/types/project'
 
@@ -20,6 +21,15 @@ const AXIS_LENGTH = 7
 const AXIS_COLORS = { x: 0xe06a6a, y: 0x7ac08f, z: 0x6a8fe0 }
 
 export type GizmoMode = 'translate' | 'rotate' | 'scale'
+
+/** Whether `obj` and every ancestor up to (and including) `root` are visible. */
+function shownUpTo(obj: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let o: THREE.Object3D | null = obj; o; o = o.parent) {
+    if (!o.visible) return false
+    if (o === root) return true
+  }
+  return true
+}
 
 export interface PickHit {
   nodeId: string
@@ -55,6 +65,19 @@ export class WorldSession {
   /** Set once the user orbits/pans/zooms: from then on, meshes finishing
    *  loading no longer re-frame the camera under them. */
   private viewTouched = false
+  /** 'top' picks whole stage inputs (assembly: keypoints work on those);
+   *  'part' picks the deepest piece inside an assembly input, reported as
+   *  its part key (`asm/…/mesh`). */
+  private pickDepth: 'top' | 'part' = 'top'
+  /** No orbit, picking or gizmo — an observer playing its animation. */
+  private locked = false
+  /** The animation camera owns the view: OrbitControls must not update
+   *  (its update() would re-aim the camera at the orbit target). */
+  private cameraDriven = false
+  /** The animation camera, an object in the world of its own. */
+  private animRig: AnimCameraRig | null = null
+  /** Render through the animation camera instead of the working one. */
+  private lookThrough = false
   private raycaster = new THREE.Raycaster()
   private ndc = new THREE.Vector2()
 
@@ -104,26 +127,27 @@ export class WorldSession {
     const gizmo = new TransformControls(camera, renderer.domElement)
     gizmo.setMode('translate')
     gizmo.addEventListener('dragging-changed', (e) => {
-      controls.enabled = !e.value
-      const obj = this.selectedId ? this.objects.get(this.selectedId) : null
-      if (!e.value && obj && this.selectedId) {
-        const toDeg = THREE.MathUtils.radToDeg
-        opts.onObjectMoved?.(this.selectedId, {
-          pos: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
-          rot: { x: toDeg(obj.rotation.x), y: toDeg(obj.rotation.y), z: toDeg(obj.rotation.z) },
-        })
-      }
+      controls.enabled = !e.value && !this.locked && !this.cameraDriven
+      const obj = this.selectedId ? this.getObject(this.selectedId) : null
+      if (!e.value && obj && this.selectedId) opts.onObjectMoved?.(this.selectedId, readPose(obj))
     })
     scene.add(gizmo.getHelper())
     this.gizmo = gizmo
 
+    const rig = new AnimCameraRig(camera.fov)
+    scene.add(rig.root)
+    this.animRig = rig
+
+    // (the animation camera keeps its fixed 16:9 frame)
     const resize = () => {
+      if (this.exportSize) return // export owns the canvas size until it ends
       const w = Math.max(1, container.clientWidth)
       const h = Math.max(1, container.clientHeight)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       renderer.setSize(w, h)
     }
+    this.resize = resize
     resize()
     if (typeof ResizeObserver === 'function') {
       this.resizeObserver = new ResizeObserver(resize)
@@ -138,10 +162,11 @@ export class WorldSession {
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
       const dt = clock.getDelta()
-      controls.update()
+      if (!this.cameraDriven) controls.update()
       opts.onFrame?.(dt)
       this.updateHover()
-      renderer.render(scene, camera)
+      if (this.viewingThrough()) this.renderFramed(rig.camera)
+      else renderer.render(scene, camera)
     }
     loop()
 
@@ -163,10 +188,17 @@ export class WorldSession {
     for (const [id, obj] of this.objects) {
       // view-only objects (set by hooks/useWorldSession.ts) are never picked
       if (!obj.visible || obj.userData.msViewOnly) continue
-      const hits = this.raycaster.intersectObject(obj, true)
-      if (hits.length && (!best || hits[0].distance < best.hit.distance)) {
-        best = { id, hit: hits[0] }
-      }
+      // three's raycaster ignores `visible` — skip pieces hidden inside
+      const hit = this.raycaster.intersectObject(obj, true).find((h) => shownUpTo(h.object, obj))
+      if (hit && (!best || hit.distance < best.hit.distance)) best = { id, hit }
+    }
+    // the animation camera's body is pickable too (not while keypointing)
+    const rig = this.animRig
+    if (rig?.root.visible && rig.visual.visible && this.keypointMode === null) {
+      const hit = this.raycaster
+        .intersectObject(rig.visual, true)
+        .find((h) => h.object.userData.msAnimCamera)
+      if (hit && (!best || hit.distance < best.hit.distance)) best = { id: ANIM_CAMERA_KEY, hit }
     }
     return best
   }
@@ -182,13 +214,75 @@ export class WorldSession {
         ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
         : new THREE.Vector3(0, 1, 0)
       return {
-        nodeId: best.id,
+        nodeId: this.pickKey(best.id, hit.object),
         point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
         normal: { x: n.x, y: n.y, z: n.z },
         candidates: [],
       }
     }
     return { nodeId: best.id, ...snapIntersection(hit, this.keypointMode) }
+  }
+
+  /** The key to report for a hit on stage object `id`: the object itself,
+   *  or at 'part' depth the path down to the deepest piece hit — segments
+   *  come from the `msNodeId` lib/three/stageInput.ts tags each piece with. */
+  private pickKey(id: string, hitObject: THREE.Object3D): string {
+    if (this.pickDepth === 'top') return id
+    const top = this.objects.get(id)
+    const segs: string[] = []
+    for (let o: THREE.Object3D | null = hitObject; o && o !== top; o = o.parent) {
+      if (o.userData.msNodeId) segs.unshift(o.userData.msNodeId as string)
+    }
+    return [id, ...segs].join('/')
+  }
+
+  setPickDepth(depth: 'top' | 'part'): void {
+    this.pickDepth = depth
+  }
+
+  /** Locks (or releases) every user interaction with the viewport. */
+  setLocked(locked: boolean): void {
+    this.locked = locked
+    if (this.controls) this.controls.enabled = !locked && !this.cameraDriven
+    if (locked) this.gizmo?.detach()
+    else this.setSelected(this.selectedId)
+    this.hoverDirty = true
+  }
+
+  /** Hands the view to the animation camera (setCameraPose from outside)
+   *  or gives it back to OrbitControls — re-aiming the orbit target straight
+   *  ahead of wherever the animation left the camera, so it doesn't snap. */
+  setCameraDriven(driven: boolean): void {
+    const { camera, controls } = this
+    if (!camera || !controls || driven === this.cameraDriven) return
+    this.cameraDriven = driven
+    controls.enabled = !driven && !this.locked
+    if (!driven) this.reaimOrbit()
+  }
+
+  /** Puts the orbit target straight ahead of the camera (keeping its
+   *  distance), so orbiting resumes from the current view without a jump. */
+  private reaimOrbit(): void {
+    const { camera, controls } = this
+    if (!camera || !controls) return
+    const dist = Math.max(camera.position.distanceTo(controls.target), camera.near * 10)
+    const ahead = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+    controls.target.copy(camera.position).addScaledVector(ahead, dist)
+    controls.update()
+  }
+
+  /** Moves the working view to `pose` (e.g. where the animation camera
+   *  is) and lets the user orbit on from there. */
+  adoptView(pose: Pose): void {
+    if (!this.camera) return
+    applyPose(this.camera, pose)
+    this.camera.updateMatrixWorld()
+    this.reaimOrbit()
+  }
+
+  /** Whether the user has orbited / zoomed the view themselves. */
+  get viewWasTouched(): boolean {
+    return this.viewTouched
   }
 
   private wirePicking(dom: HTMLElement): void {
@@ -209,11 +303,12 @@ export class WorldSession {
       if (!down) return
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
-      if (moved > CLICK_SLOP) return
+      // looking through the animation camera is a preview, not a place to pick
+      if (moved > CLICK_SLOP || this.locked || this.viewingThrough()) return
       // A click is not an orbit: OrbitControls still turned the camera by
       // the few pixels of hand jitter (and damping would keep drifting it),
       // so put the view back exactly where it was.
-      if (viewAtDown) this.restoreView(viewAtDown.pos, viewAtDown.target)
+      if (viewAtDown && !this.cameraDriven) this.restoreView(viewAtDown.pos, viewAtDown.target)
       if (!this.opts.onPick) return
       const best = this.raycastAt(e.clientX, e.clientY)
       if (!best) {
@@ -265,7 +360,7 @@ export class WorldSession {
     this.hoverDirty = false
 
     const best =
-      this.keypointMode !== null && this.hoverPointer
+      this.keypointMode !== null && this.hoverPointer && !this.locked && !this.viewingThrough()
         ? this.raycastAt(this.hoverPointer.x, this.hoverPointer.y)
         : null
     if (this.renderer) this.renderer.domElement.style.cursor = best ? 'crosshair' : ''
@@ -362,6 +457,7 @@ export class WorldSession {
    *  key (`asmId/meshId`, see lib/graph.ts) — each segment after the first
    *  names a child built by lib/three/stageInput.ts. */
   getObject(id: string): THREE.Object3D | null {
+    if (id === ANIM_CAMERA_KEY) return this.animRig?.root.visible ? this.animRig.root : null
     const direct = this.objects.get(id)
     if (direct) return direct
     const [top, ...rest] = id.split('/')
@@ -375,7 +471,9 @@ export class WorldSession {
   setSelected(id: string | null): void {
     this.selectedId = id
     if (!this.gizmo) return
-    const obj = id ? this.objects.get(id) : null
+    // a part key resolves to the piece inside its assembly group; the
+    // gizmo handles the parent transform itself
+    const obj = id && !this.locked && !this.viewingThrough() ? this.getObject(id) : null
     if (obj) this.gizmo.attach(obj)
     else this.gizmo.detach()
   }
@@ -485,6 +583,10 @@ export class WorldSession {
     this.camera.near = Math.max(radius / 200, 1e-4)
     this.camera.far = Math.max(radius * 200, 500)
     this.camera.updateProjectionMatrix()
+    // the animation camera shares the clip range, and its body is sized to
+    // read clearly next to the pieces
+    this.animRig?.setClip(this.camera.near, this.camera.far)
+    this.animRig?.setSize(radius * 0.16)
     const dist = Math.max(radius * 2.4, this.camera.near * 4)
     this.camera.position.set(
       sphere.center.x + dist * 0.6,
@@ -513,8 +615,107 @@ export class WorldSession {
     applyPose(this.camera, pose)
   }
 
+  // ---------- animation camera ----------
+
+  /** Places the animation camera (its track's pose), or hides it (null:
+   *  the stage animates no camera). */
+  setAnimCamera(pose: Pose | null): void {
+    const rig = this.animRig
+    if (!rig) return
+    const wasVisible = rig.root.visible
+    rig.root.visible = !!pose
+    if (pose) applyPose(rig.root, pose)
+    // (un)hiding changes what a "camera" selection resolves to
+    if (wasVisible !== rig.root.visible && this.selectedId === ANIM_CAMERA_KEY) {
+      this.setSelected(this.selectedId)
+    }
+  }
+
+  getAnimCameraPose(): Pose | null {
+    const rig = this.animRig
+    return rig?.root.visible ? readPose(rig.root) : null
+  }
+
+  /** See the world through the animation camera (its body hides, the
+   *  working view and its controls wait untouched until turned off). */
+  setLookThrough(on: boolean): void {
+    this.lookThrough = on
+    if (this.animRig) this.animRig.visual.visible = !on
+    if (this.controls) this.controls.enabled = !on && !this.locked && !this.cameraDriven
+    this.setSelected(this.selectedId)
+    this.hoverDirty = true
+  }
+
+  private viewingThrough(): boolean {
+    return this.lookThrough && !!this.animRig?.root.visible
+  }
+
   render(): void {
     if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera)
+  }
+
+  /** Renders one frame through the animation camera (video export),
+   *  without its own body in the shot. False if there is none. */
+  renderAnimCamera(): boolean {
+    const rig = this.animRig
+    if (!rig?.root.visible || !this.renderer || !this.scene) return false
+    const shown = rig.visual.visible
+    rig.visual.visible = false
+    this.renderFramed(rig.camera)
+    rig.visual.visible = shown
+    return true
+  }
+
+  /** Renders a 16:9 camera into the largest 16:9 rectangle that fits the
+   *  canvas, black bars around it — exactly the shot video export records. */
+  private renderFramed(cam: THREE.Camera): void {
+    const { renderer, scene } = this
+    if (!renderer || !scene) return
+    const size = renderer.getSize(new THREE.Vector2())
+    let w = size.x
+    let h = w / ANIM_ASPECT
+    if (h > size.y) {
+      h = size.y
+      w = h * ANIM_ASPECT
+    }
+    const x = (size.x - w) / 2
+    const y = (size.y - h) / 2
+    renderer.setScissorTest(false)
+    renderer.setClearColor(0x000000)
+    renderer.clear()
+    renderer.setViewport(x, y, w, h)
+    renderer.setScissor(x, y, w, h)
+    renderer.setScissorTest(true)
+    renderer.render(scene, cam)
+    renderer.setScissorTest(false)
+    renderer.setViewport(0, 0, size.x, size.y)
+  }
+
+  // ---------- video export ----------
+
+  private resize: (() => void) | null = null
+  private exportSize: { pixelRatio: number } | null = null
+
+  /** Switches the canvas to a fixed 16:9 video size (CSS size untouched)
+   *  for the length of an export; the working camera — used when the stage
+   *  animates no camera — is framed 16:9 too. Returns the canvas. */
+  beginExport(width = 1280, height = 720): HTMLCanvasElement | null {
+    const { renderer, camera } = this
+    if (!renderer || !camera) return null
+    this.exportSize = { pixelRatio: renderer.getPixelRatio() }
+    renderer.setPixelRatio(1)
+    renderer.setSize(width, height, false)
+    camera.aspect = width / height
+    camera.updateProjectionMatrix()
+    return renderer.domElement
+  }
+
+  endExport(): void {
+    const { renderer } = this
+    if (!renderer || !this.exportSize) return
+    renderer.setPixelRatio(this.exportSize.pixelRatio)
+    this.exportSize = null
+    this.resize?.()
   }
 
   dispose(): void {
@@ -523,6 +724,7 @@ export class WorldSession {
     this.resizeObserver?.disconnect()
     this.controls?.dispose()
     this.gizmo?.dispose()
+    this.animRig?.dispose()
     if (this.renderer) {
       this.renderer.dispose()
       const el = this.renderer.domElement
