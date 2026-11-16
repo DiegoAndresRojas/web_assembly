@@ -23,6 +23,7 @@ function snapshot(stage: Stage): StageSnapshot {
       tracks: stage.tracks,
       camera: stage.camera,
       partOverrides: stage.partOverrides,
+      startPoses: stage.startPoses,
     }),
   )
 }
@@ -33,6 +34,7 @@ function restore(stage: Stage, snap: StageSnapshot): void {
   stage.tracks = snap.tracks
   stage.camera = snap.camera
   stage.partOverrides = snap.partOverrides ?? {}
+  stage.startPoses = snap.startPoses ?? {}
 }
 
 export function createHistorySlice(set: Set, get: Get): HistoryActions {

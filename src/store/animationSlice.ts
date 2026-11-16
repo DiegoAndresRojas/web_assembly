@@ -3,9 +3,9 @@
 // plus the timeline's own UI state (playhead, zoom, snapping, selection).
 // Every committed edit is undoable through the shared history slice.
 import { cameraSources, DEFAULT_CAMERA_NAME } from '@/lib/cameras'
-import { effectiveTrack } from '@/lib/chain'
+import { effectiveTrack, importedPoses } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
-import { inputLabel, partForKey, restPoseOf } from '@/lib/graph'
+import { inputLabel, PART_SEP, partForKey, restPoseOf } from '@/lib/graph'
 import { normalizeAction, normalizeTrack } from '@/lib/migrations'
 import {
   MIN_ACTION_S,
@@ -188,6 +188,32 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         state.worldSelId = ANIM_CAMERA_KEY
         if (cam) state.selection = { trackId: cam.id, actionId: 'init' }
         // show where it starts
+        state.playT = 0
+        state.playing = false
+      })
+    },
+    importStartPoses(fromStageId, at, only) {
+      const { pid, aid, projects } = get()
+      const project = projects.find((p) => p.id === pid)
+      if (!project || !aid) return
+      const inScope = (key: string) => !only || key === only || key.startsWith(only + PART_SEP)
+      const poses = fromStageId ? importedPoses(project, aid, fromStageId, at, only) : {}
+      pushHistory()
+      set((state) => {
+        const stage = openStage(state)?.stage
+        if (!stage) return
+        // back to "as assembled" first, for the pieces this is about
+        for (const key of Object.keys(stage.startPoses)) {
+          if (inScope(key) && (!fromStageId || key in poses)) delete stage.startPoses[key]
+        }
+        for (const [key, pose] of Object.entries(poses)) stage.startPoses[key] = clonePose(pose)
+        // their tracks start there too, whatever pose they had been given
+        const touched = fromStageId ? (key: string) => key in poses : inScope
+        for (const track of stage.tracks) {
+          if (track.targetKind === 'mesh' && track.nodeId && touched(track.nodeId)) {
+            track.initLinked = true
+          }
+        }
         state.playT = 0
         state.playing = false
       })

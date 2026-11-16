@@ -21,6 +21,7 @@ import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import type { PartLook, Project, Stage } from '@/types/project'
 import { ImportCameraDialog } from './ImportCameraDialog'
+import { ImportPosesDialog } from './ImportPosesDialog'
 import { MemberRow } from './MemberRow'
 
 export interface AnimatePanelProps {
@@ -305,6 +306,7 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
   const addMeshTrack = useStore((s) => s.addMeshTrack)
   const removeMember = useStore((s) => s.removeMember)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [importingPoses, setImportingPoses] = useState(false)
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -330,7 +332,27 @@ export function AnimatePanel({ project, stageId, stage, session }: AnimatePanelP
       }}
     >
       <div style={{ flex: 'none' }}>
-        <div className="tl-section-title">Scene</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <div className="tl-section-title" style={{ flex: 1 }}>
+            Scene
+          </div>
+          <Button
+            variant="ghost"
+            title="Start the pieces where another animation has them"
+            onClick={() => setImportingPoses(true)}
+            style={{ height: 22, minHeight: 22, padding: '0 7px', fontSize: 10, gap: 4 }}
+          >
+            <ImportIcon size={11} /> Import positions
+          </Button>
+        </div>
+        {importingPoses && (
+          <ImportPosesDialog
+            project={project}
+            stageId={stageId}
+            selectedKey={worldSelId && worldSelId !== ANIM_CAMERA_KEY ? worldSelId : null}
+            onClose={() => setImportingPoses(false)}
+          />
+        )}
         <div className="text-muted" style={{ fontSize: 10, lineHeight: 1.5, marginTop: 4 }}>
           Click a piece (here or in the viewport), move it with the gizmo, then <b>Record pose</b>{' '}
           (K). Esc selects the assembly holding it.

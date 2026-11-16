@@ -2,10 +2,13 @@ import { MESH_H, MESH_W, NODE_W, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '@/lib/con
 import { duplicateNode } from '@/lib/duplicate'
 import { edgeFor, keyRefersTo } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
+import type { Draft } from 'immer'
+
+import { chainStartPoses } from '@/lib/chain'
 import { clamp, uid } from '@/lib/utils'
-import { findProject } from './helpers'
+import { ensureStage, findProject } from './helpers'
 import type { BoardActions, BoardState, Get, Set } from './types'
-import type { NodeKind } from '@/types/project'
+import type { NodeKind, Project } from '@/types/project'
 
 export const initialBoardState: BoardState = {
   pan: { x: 60, y: 60 },
@@ -20,6 +23,20 @@ export const initialBoardState: BoardState = {
   meshFilterExt: null,
   hoverAssembly: false,
   hoverAnimation: false,
+}
+
+/** An assembly was just wired into an animation: its pieces start where
+ *  the animations earlier in the chain left them. Taken once, here — a
+ *  piece the animation already holds a start pose for keeps it. */
+function takeChainStartPoses(project: Draft<Project>, fromId: string, toId: string): void {
+  const kindOf = (id: string) => project.board.nodes.find((n) => n.id === id)?.kind
+  if (kindOf(fromId) !== 'assembly' || kindOf(toId) !== 'animation') return
+  const stage = ensureStage(project, toId, 'animation')
+  for (const [key, pose] of Object.entries(chainStartPoses(project, fromId))) {
+    if (!(key in stage.startPoses)) {
+      stage.startPoses[key] = { pos: { ...pose.pos }, rot: { ...pose.rot } }
+    }
+  }
 }
 
 function nodeBox(kind: NodeKind, x: number, y: number) {
@@ -184,6 +201,9 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
           for (const key of Object.keys(stage.partOverrides)) {
             if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]
           }
+          for (const key of Object.keys(stage.startPoses)) {
+            if (keyRefersTo(key, nodeId)) delete stage.startPoses[key]
+          }
           stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
           for (const key of Object.keys(stage.partLooks ?? {})) {
             if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
@@ -222,7 +242,10 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const edge = target ? edgeFor(project, from, target) : null
         if (edge) {
           const exists = project.board.edges.some((e) => e.from === edge.from && e.to === edge.to)
-          if (!exists) project.board.edges.push({ id: uid(), ...edge })
+          if (!exists) {
+            project.board.edges.push({ id: uid(), ...edge })
+            takeChainStartPoses(project, edge.from, edge.to)
+          }
         }
         state.linking = null
       })

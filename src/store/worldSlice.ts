@@ -85,6 +85,9 @@ export function createWorldSlice(set: Set): WorldActions {
           for (const key of Object.keys(stage.partLooks ?? {})) {
             if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
           }
+          for (const key of Object.keys(stage.startPoses)) {
+            if (keyRefersTo(key, nodeId)) delete stage.startPoses[key]
+          }
           // (pieces released from the removed input go with it)
           for (const key of Object.keys(stage.partOverrides)) {
             if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]

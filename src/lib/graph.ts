@@ -193,7 +193,8 @@ function reaches(project: Project, fromId: string, toId: string): boolean {
   return false
 }
 
-/** Which stage kinds may take another stage's output as input. */
+/** Which stage kinds may take another stage's output as input. Only an
+ *  assembly has an output: an animation takes inputs and feeds nothing. */
 const STAGE_OUTPUTS: Record<string, NodeKind[]> = {
   assembly: ['assembly', 'animation'],
 }

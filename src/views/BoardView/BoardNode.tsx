@@ -52,7 +52,8 @@ export function BoardNode({
   const w = isMesh ? MESH_W : NODE_W
   const h = isMesh ? MESH_H : NODE_W
   const showHandles = isMesh && (hovered || selected)
-  const showOut = !isMesh && (hovered || selected)
+  // an animation only takes inputs: nothing comes out of it
+  const showOut = node.kind === 'assembly' && (hovered || selected)
   const color = STAGE_COLOR[node.kind] ?? STAGE_COLOR.assembly
 
   return (

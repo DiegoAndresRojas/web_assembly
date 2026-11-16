@@ -134,6 +134,11 @@ export interface Stage {
   /** Visibility / opacity of pieces inside assembly inputs, by part key
    *  (an animation can hide or fade a single piece of an assembly). */
   partLooks: Record<string, PartLook>
+  /** Animation stages: where pieces start when that is not where their
+   *  assembly put them, by node id / part key — taken from the animations
+   *  earlier in the chain when an assembly is first wired in, or imported
+   *  from another animation by the author. */
+  startPoses: Record<string, Pose>
   /** Pieces of this stage's assembly inputs that were unlocked from them,
    *  by part key (`asmNodeId/pieceNodeId`). */
   partOverrides: Record<string, PartOverride>

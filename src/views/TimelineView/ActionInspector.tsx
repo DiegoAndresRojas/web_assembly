@@ -183,7 +183,7 @@ export function ActionInspector({
               <Check
                 checked={track.initLinked}
                 label="Where the piece is"
-                title="Start where the assembly put the piece, or where the last animation before this one left it — and keep following it when those change"
+                title="Start where the piece is when this animation begins: where its assembly put it, or the position imported for it (Import positions)"
                 onChange={(v) => {
                   beginEdit()
                   setInitLinked(track.id, v)

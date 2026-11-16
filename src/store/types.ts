@@ -170,6 +170,7 @@ export interface StageSnapshot {
   tracks: Track[]
   camera: StageCamera | null
   partOverrides: Record<string, PartOverride>
+  startPoses: Record<string, Pose>
 }
 
 export interface HistoryState {
@@ -268,6 +269,11 @@ export interface AnimationActions {
    *  animation's camera has when that animation starts or ends (creating
    *  the camera here if there is none yet). */
   importCamera: (fromStageId: string, at: 'start' | 'end') => void
+  /** Starts the open animation's pieces where another animation has them
+   *  when it starts or ends — every piece the two share, or only `only`
+   *  and what is inside it. `fromStageId` null puts them back where their
+   *  assembly has them. Tracks of those pieces start there too. */
+  importStartPoses: (fromStageId: string | null, at: 'start' | 'end', only: string | null) => void
   removeTrack: (trackId: string) => void
   confirmRemoveTrack: () => void
   onCamKill: () => void

@@ -35,9 +35,11 @@ import type {
 // 10: pieces unlocked from assembly inputs (partOverrides).
 // 11: tracks may start where the piece already is (initLinked).
 // 12: animation cameras have a name.
+// 13: animations hold the start poses of their pieces (startPoses) and
+//     only take inputs — edges coming out of one are dropped.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 12
+export const CURRENT_VERSION = 13
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -187,6 +189,15 @@ function normalizePartOverrides(raw: unknown): Record<string, PartOverride> {
   return out
 }
 
+function normalizeStartPoses(raw: unknown): Record<string, Pose> {
+  const out: Record<string, Pose> = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v && typeof v === 'object') out[key] = normalizePose(v)
+  }
+  return out
+}
+
 function cameraName(raw: unknown): string {
   return typeof raw === 'string' && raw.trim() ? raw.trim() : 'Camera'
 }
@@ -221,6 +232,7 @@ export function normalizeStage(raw: unknown): Stage {
     union: s.union && typeof s.union === 'object' ? (s.union as { at: number }) : null,
     partLooks: normalizePartLooks(s.partLooks),
     partOverrides: normalizePartOverrides(s.partOverrides),
+    startPoses: normalizeStartPoses(s.startPoses),
   }
 }
 
@@ -238,10 +250,14 @@ export function normalizeProject(raw: unknown): Project | null {
     ? boardRaw.edges.map(normalizeEdge).filter((e): e is BoardEdge => !!e)
     : []
   const nodeIds = new Set(nodes.map((n) => n.id))
+  const animationIds = new Set(nodes.filter((n) => n.kind === 'animation').map((n) => n.id))
   const board: Board = {
     nodes,
-    // edges of nodes that no longer exist (e.g. removed node kinds) go too
-    edges: edges.filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to)),
+    // edges of nodes that no longer exist (e.g. removed node kinds) go too,
+    // and so does anything coming out of an animation: it only takes inputs
+    edges: edges.filter(
+      (e) => nodeIds.has(e.from) && nodeIds.has(e.to) && !animationIds.has(e.from),
+    ),
   }
 
   const stages: Record<string, Stage> = {}
