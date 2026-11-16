@@ -68,6 +68,8 @@ export class WorldSession {
   /** Set once the user orbits/pans/zooms: from then on, meshes finishing
    *  loading no longer re-frame the camera under them. */
   private viewTouched = false
+  /** The view this stage was left with last time (see holdView). */
+  private heldView: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null
   /** 'top' picks whole stage inputs (assembly: keypoints work on those);
    *  'part' picks the deepest piece inside an assembly input, reported as
    *  its part key (`asm/…/mesh`). */
@@ -627,7 +629,33 @@ export class WorldSession {
   /** frameAll(), but only until the user has moved the view themselves —
    *  for meshes that finish loading while the user may already be working. */
   frameAllIfUntouched(): void {
-    if (!this.viewTouched) this.frameAll()
+    if (this.viewTouched) return
+    // (framing also fits the clip planes to the pieces, so it runs even
+    // when the view then goes back to where it was left)
+    this.frameAll()
+    if (this.heldView) this.restoreView(this.heldView.pos, this.heldView.target)
+  }
+
+  /** Looks from where the view was left last time, instead of framing the
+   *  pieces, until the user moves the view again. */
+  holdView(pos: THREE.Vector3Tuple, target: THREE.Vector3Tuple): void {
+    this.heldView = {
+      pos: new THREE.Vector3(...pos),
+      target: new THREE.Vector3(...target),
+    }
+    this.restoreView(this.heldView.pos, this.heldView.target)
+  }
+
+  /** Where the view is worth coming back to: wherever the user put it
+   *  (or it was held), null if it was only ever framed automatically. */
+  get leftView(): { pos: THREE.Vector3Tuple; target: THREE.Vector3Tuple } | null {
+    if (this.viewTouched && this.camera && this.controls) {
+      return { pos: this.camera.position.toArray(), target: this.controls.target.toArray() }
+    }
+    if (this.heldView) {
+      return { pos: this.heldView.pos.toArray(), target: this.heldView.target.toArray() }
+    }
+    return null
   }
 
   frameAll(): void {

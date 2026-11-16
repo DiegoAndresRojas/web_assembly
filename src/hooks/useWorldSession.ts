@@ -292,14 +292,18 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       onObjectMoved,
       companionsOf,
     })
+    // look from where this stage was left last time
+    const left = stageId ? useStore.getState().stageViews[stageId]?.orbit : null
+    if (left) created.holdView(left.pos, left.target)
     currentSession = created
     setSession(created)
     return () => {
+      if (stageId) useStore.getState().rememberOrbit(stageId, created.leftView)
       created.dispose()
       if (currentSession === created) currentSession = null
       setSession(null)
     }
-  }, [container])
+  }, [container, stageId])
 
   // `project` is only a trigger here — syncSession reads the latest store
   useEffect(() => {

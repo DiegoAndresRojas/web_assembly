@@ -40,7 +40,7 @@ export const useStore = create<AppState>()(
       name: STORAGE_KEY,
       version: CURRENT_VERSION,
       storage: createProjectStorage(),
-      partialize: (state) => ({ projects: state.projects }),
+      partialize: (state) => ({ projects: state.projects, stageViews: state.stageViews }),
       migrate: (persisted) => runMigrations(persisted),
       merge: (persisted, current) => ({ ...current, ...(persisted as Partial<AppState>) }),
     },

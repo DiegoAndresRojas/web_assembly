@@ -15,8 +15,11 @@ import type { PersistStorage, StorageValue } from 'zustand/middleware'
 
 const WRITE_INTERVAL_MS = 400
 
-export function createProjectStorage<S extends { projects: unknown }>(): PersistStorage<S> {
+export function createProjectStorage<
+  S extends { projects: unknown; stageViews?: unknown },
+>(): PersistStorage<S> {
   let lastProjects: unknown = undefined
+  let lastViews: unknown = undefined
   let pending: { name: string; value: StorageValue<S> } | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -54,8 +57,10 @@ export function createProjectStorage<S extends { projects: unknown }>(): Persist
       }
     },
     setItem(name, value) {
-      if (value.state.projects === lastProjects) return
-      lastProjects = value.state.projects
+      const { projects, stageViews } = value.state
+      if (projects === lastProjects && stageViews === lastViews) return
+      lastProjects = projects
+      lastViews = stageViews
       pending = { name, value }
       if (timer === null) timer = setTimeout(flush, WRITE_INTERVAL_MS)
     },

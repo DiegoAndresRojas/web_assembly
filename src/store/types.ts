@@ -71,11 +71,30 @@ export interface ProjectsActions {
 }
 
 // ---------- navigation ----------
+/** Where the working (orbit) camera was looking from. */
+export interface OrbitView {
+  pos: [number, number, number]
+  target: [number, number, number]
+}
+
+/** How a stage's view was left, so coming back to it finds it the same. */
+export interface StageView {
+  /** Assembly inputs whose lock was open. */
+  asmOpen: string[]
+  worldSelId: string | null
+  playT: number
+  selection: TimelineSelection | null
+  /** Null until the user has moved the view themselves. */
+  orbit: OrbitView | null
+}
+
 export interface NavigationState {
   view: 'projects' | 'board' | 'world'
   pid: string | null
   aid: string | null
   wmode: WorldMode
+  /** By stage node id. Saved with the projects. */
+  stageViews: Record<string, StageView>
 }
 
 export interface NavigationActions {
@@ -83,6 +102,8 @@ export interface NavigationActions {
   backToProjects: () => void
   openStage: (nodeId: string) => void
   backToBoard: () => void
+  /** Keeps where the working camera was when a stage's 3D view closes. */
+  rememberOrbit: (stageId: string, orbit: OrbitView | null) => void
 }
 
 // ---------- board ----------
