@@ -102,9 +102,30 @@ Comprobación manual:
 - Cargar en la biblioteca un archivo que no es una malla y ver el aviso.
 - Entrar y salir de varias etapas muchas veces seguidas: la vista 3D debe seguir apareciendo.
 
+Exportar e importar comprobado por el autor el 2026-11-16.
+
+### H2 — Secuencia de pasos (rama `h2/step-sequence`) — pendiente de comprobar a mano
+
+Qué se hizo (commit `feat: an ordered sequence of steps, and undo on the board`):
+
+1. `project.steps`: lista ordenada de pasos `{ id, stageId, title, instructions }` (esquema 16). Un paso apunta a una etapa del tablero (animación o ensamblaje), y cada etapa es un paso como mucho una vez.
+2. Panel "Steps" en el tablero: añadir etapas (una a una o todas en el orden de la cadena), reordenar, renombrar, escribir instrucciones, abrir el paso.
+3. En la vista 3D, la cabecera muestra "2/5" con flechas para ir al paso anterior o siguiente sin volver al tablero.
+4. Deshacer y rehacer en el tablero (Ctrl+Z, Ctrl+Shift+Z y botones): soltar, mover, conectar, renombrar, duplicar y borrar nodos, borrar mallas de la biblioteca, color, escala y los pasos. El historial se vacía al abrir una etapa.
+5. Borrar una etapa avisa en pantalla de que Ctrl+Z la recupera (en lugar de pedir confirmación).
+
+Queda de H2 (no hecho): eliminar campos sin uso y la fuente única de verdad para las entradas de una etapa.
+
+Comprobación manual:
+
+- Añadir pasos con "+", reordenarlos, renombrar uno y escribirle instrucciones; recargar y ver que siguen.
+- Abrir un paso y pasar al siguiente y al anterior con las flechas de la cabecera.
+- Borrar una etapa del tablero y recuperarla con Ctrl+Z, con su contenido y su paso.
+- Mover un nodo, deshacer y rehacer.
+
 ### Pendiente de estas ramas
 
-- Fusionar `h1/safe-data` en `main` (contiene a todas las anteriores).
+- Fusionar `h2/step-sequence` en `main` (contiene a todas las anteriores).
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes
@@ -205,6 +226,6 @@ Tareas:
 
 ## 8. Orden recomendado
 
-1. Comprobar H1 a mano, fusionar `h1/safe-data` en `main` y subir.
-2. H2 y H3 seguidos: juntos entregan la idea original.
+1. Comprobar H2 a mano, fusionar `h2/step-sequence` en `main` y subir.
+2. H3 (visor): con los pasos ya hay qué recorrer.
 3. H4, H5 y H6 según lo que más se eche en falta al usar el visor.
