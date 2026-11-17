@@ -274,6 +274,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   return (
     <main
       ref={containerRef}
+      className="board"
       style={{
         flex: 1,
         minWidth: 0,

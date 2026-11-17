@@ -721,6 +721,18 @@ a:hover {
 
 /* ---- board selection ---- */
 
+/* dragging over the board selects nodes, never their text */
+.board {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.board input,
+.board textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .board-node--sel {
   outline: 2px solid var(--color-accent-300);
   outline-offset: 4px;
