@@ -3,6 +3,8 @@ import type { Draft } from 'immer'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { PART_SEP } from '@/lib/graph'
 import { isLightKey, lightForKey } from '@/lib/lights'
+import { sequenceOf } from '@/lib/steps'
+import { stageDuration } from '@/lib/timeline'
 import type { AppState, Get, NavigationActions, NavigationState, Set, StageView } from './types'
 import type { Stage, WorldMode } from '@/types/project'
 
@@ -11,6 +13,7 @@ export const initialNavigationState: NavigationState = {
   pid: null,
   aid: null,
   wmode: 'assembly',
+  viewerFrom: 'projects',
   stageViews: {},
 }
 
@@ -112,6 +115,59 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.worldSelId = view.worldSelId
         state.playT = view.playT
         state.selection = view.selection
+      })
+    },
+
+    openViewer(pid, from) {
+      const project = get().projects.find((p) => p.id === pid)
+      const first = project && sequenceOf(project)[0]
+      if (!first) {
+        get().notify('Nothing to play yet: add steps on the board, or an animation.', 'info')
+        return
+      }
+      set((state) => {
+        rememberStageView(state)
+        state.pid = pid
+        state.view = 'viewer'
+        state.viewerFrom = from
+        state.cameraView = true
+      })
+      get().clearBoardHistory()
+      get().viewStep(first.stageId)
+    },
+
+    viewStep(stageId) {
+      const { pid, projects } = get()
+      const node = projects.find((p) => p.id === pid)?.board.nodes.find((n) => n.id === stageId)
+      if (!node || node.kind === 'mesh') return
+      set((state) => {
+        state.aid = stageId
+        state.wmode = wmodeForKind(node.kind)
+        state.kpOn = false
+        state.pendingPicks = []
+        state.asmOpen = []
+        state.hint = 'Loading…'
+        state.worldSelId = null
+        state.selection = null
+        state.playT = 0
+        state.playing = false
+        state.loop = false
+      })
+      get().clearHistory()
+      // (a stage never opened has no member rows yet)
+      get().syncStageMembers(stageId)
+      set((state) => {
+        const stage = state.projects.find((p) => p.id === state.pid)?.stages[stageId]
+        state.playing = stage?.kind === 'animation' && stageDuration(stage) > 0
+      })
+    },
+
+    closeViewer() {
+      set((state) => {
+        state.playing = false
+        state.playT = 0
+        state.view = state.viewerFrom
+        if (state.viewerFrom === 'projects') state.pid = null
       })
     },
 

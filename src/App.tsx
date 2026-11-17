@@ -12,12 +12,16 @@ import { ProjectsView } from '@/views/ProjectsView/ProjectsView'
 const WorldView = lazy(() =>
   import('@/views/WorldView/WorldView').then((m) => ({ default: m.WorldView })),
 )
+const ViewerView = lazy(() =>
+  import('@/views/ViewerView/ViewerView').then((m) => ({ default: m.ViewerView })),
+)
 
 export function App() {
   const view = useStore((s) => s.view)
   const aid = useStore((s) => s.aid)
   const setCtrlDown = useStore((s) => s.setCtrlDown)
   const backToBoard = useStore((s) => s.backToBoard)
+  const closeViewer = useStore((s) => s.closeViewer)
 
   // (stage shortcuts — undo, playback, timeline — live in useShortcuts,
   // mounted by WorldView)
@@ -55,6 +59,13 @@ export function App() {
         <ErrorBoundary key={aid} area="the 3D view" exitLabel="Back to board" onExit={backToBoard}>
           <Suspense fallback={null}>
             <WorldView key={aid} stageId={aid} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {view === 'viewer' && aid && (
+        <ErrorBoundary area="the viewer" exitLabel="Close" onExit={closeViewer}>
+          <Suspense fallback={null}>
+            <ViewerView stageId={aid} />
           </Suspense>
         </ErrorBoundary>
       )}

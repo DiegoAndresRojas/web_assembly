@@ -20,17 +20,22 @@ export interface StepPlace {
   next: Step | null
 }
 
-/** Where a stage stands in the sequence; null if it is not a step. */
-export function stepPlace(project: Project, stageId: string): StepPlace | null {
-  const i = project.steps.findIndex((s) => s.stageId === stageId)
+/** Where a stage stands among `steps`; null if it is not one of them. */
+export function placeIn(steps: Step[], stageId: string): StepPlace | null {
+  const i = steps.findIndex((s) => s.stageId === stageId)
   if (i < 0) return null
   return {
-    step: project.steps[i],
+    step: steps[i],
     number: i + 1,
-    total: project.steps.length,
-    prev: project.steps[i - 1] ?? null,
-    next: project.steps[i + 1] ?? null,
+    total: steps.length,
+    prev: steps[i - 1] ?? null,
+    next: steps[i + 1] ?? null,
   }
+}
+
+/** Where a stage stands in the sequence; null if it is not a step. */
+export function stepPlace(project: Project, stageId: string): StepPlace | null {
+  return placeIn(project.steps, stageId)
 }
 
 /** How far down the chain a stage is: the longest way to it from a mesh.
@@ -73,4 +78,13 @@ export function moveStep(project: Project, stepId: string, by: number): void {
   if (to === from) return
   const [step] = project.steps.splice(from, 1)
   project.steps.splice(to, 0, step)
+}
+
+/** What the viewer walks through: the project's steps — or, for a project
+ *  that has none yet, its animations in the order the chain builds them. */
+export function sequenceOf(project: Project): Step[] {
+  if (project.steps.length) return project.steps
+  return stagesWithoutStep(project)
+    .filter((node) => node.kind === 'animation')
+    .map((node) => ({ id: node.id, stageId: node.id, title: stageName(node), instructions: '' }))
 }

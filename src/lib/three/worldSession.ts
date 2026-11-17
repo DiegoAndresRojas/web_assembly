@@ -93,6 +93,7 @@ export class WorldSession {
   private animRig: AnimCameraRig | null = null
   /** Render through the animation camera instead of the working one. */
   private lookThrough = false
+  private presenting = false
   /** Width ÷ height of the animation camera's frame. */
   private frameAspect = ANIM_ASPECT
   /** Opacity of whatever is cleared behind the scene: 1 except while
@@ -362,7 +363,7 @@ export class WorldSession {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
       // looking through the animation camera is a preview, not a place to pick
-      if (moved > CLICK_SLOP || this.locked || this.viewingThrough()) return
+      if (moved > CLICK_SLOP || this.locked || this.presenting || this.viewingThrough()) return
       // A click is not an orbit: OrbitControls still turned the camera by
       // the few pixels of hand jitter (and damping would keep drifting it),
       // so put the view back exactly where it was.
@@ -783,9 +784,19 @@ export class WorldSession {
    *  working view and its controls wait untouched until turned off). */
   setLookThrough(on: boolean): void {
     this.lookThrough = on
-    if (this.animRig) this.animRig.visual.visible = !on
+    if (this.animRig) this.animRig.visual.visible = !on && !this.presenting
     if (this.controls) this.controls.enabled = !on && !this.locked && !this.cameraDriven
     this.setSelected(this.selectedId)
+    this.hoverDirty = true
+  }
+
+  /** Shows the world to someone who only watches: no grid, no camera or
+   *  light bodies, nothing to pick. */
+  setPresenting(on: boolean): void {
+    this.presenting = on
+    if (this.grid) this.grid.visible = !on
+    if (this.animRig) this.animRig.visual.visible = !on && !this.lookThrough
+    if (on) this.gizmo?.detach()
     this.hoverDirty = true
   }
 
@@ -906,7 +917,7 @@ export class WorldSession {
   /** The lights' bodies are for working on the scene, never part of a
    *  shot: hidden while looking through the animation camera or exporting. */
   private lightsHidden(): boolean {
-    return this.viewingThrough() || !!this.exportSize
+    return this.viewingThrough() || !!this.exportSize || this.presenting
   }
 
   /** Per frame: light bodies shown or not, shadows and the floor fitted to

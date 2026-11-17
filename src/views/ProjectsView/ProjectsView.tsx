@@ -6,6 +6,11 @@ import { useStore } from '@/store'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { ProjectCard } from './ProjectCard'
 
+/** `?viewer` in the address: the app only to follow assemblies — opened
+ *  from a project file — with nothing that edits them. */
+const VIEW_ONLY =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('viewer')
+
 export function ProjectsView() {
   const projects = useStore((s) => s.projects)
   const createProject = useStore((s) => s.createProject)
@@ -13,6 +18,7 @@ export function ProjectsView() {
   const askDeleteProject = useStore((s) => s.askDeleteProject)
   const exportProject = useStore((s) => s.exportProject)
   const importProject = useStore((s) => s.importProject)
+  const openViewer = useStore((s) => s.openViewer)
   const working = useStore((s) => s.working)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -55,14 +61,18 @@ export function ProjectsView() {
           >
             Import project
           </Button>
-          <Button variant="primary" onClick={handleNew}>
-            New project
-          </Button>
+          {!VIEW_ONLY && (
+            <Button variant="primary" onClick={handleNew}>
+              New project
+            </Button>
+          )}
         </div>
       </div>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 var(--space-6) var(--space-8)' }}>
         <p className="text-muted" style={{ fontSize: 13, maxWidth: '52ch' }}>
-          Each project holds a board of meshes and the assembly stages that connect them.
+          {VIEW_ONLY
+            ? 'Import a project file to follow its assembly step by step.'
+            : 'Each project holds a board of meshes and the assembly stages that connect them.'}
         </p>
 
         {projects.length > 0 ? (
@@ -78,6 +88,8 @@ export function ProjectsView() {
               <ProjectCard
                 key={p.id}
                 project={p}
+                viewOnly={VIEW_ONLY}
+                onView={() => openViewer(p.id, 'projects')}
                 onOpen={() => openProject(p.id)}
                 onExport={() => void exportProject(p.id)}
                 onDelete={() => askDeleteProject(p.id, p.name)}
@@ -98,9 +110,11 @@ export function ProjectsView() {
             <p className="text-muted" style={{ fontSize: 13, margin: 0 }}>
               Create one to start loading meshes onto a board.
             </p>
-            <Button variant="primary" style={{ marginTop: 'var(--space-4)' }} onClick={handleNew}>
-              New project
-            </Button>
+            {!VIEW_ONLY && (
+              <Button variant="primary" style={{ marginTop: 'var(--space-4)' }} onClick={handleNew}>
+                New project
+              </Button>
+            )}
           </div>
         )}
       </div>

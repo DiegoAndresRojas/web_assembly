@@ -103,7 +103,10 @@ export interface StageView {
 }
 
 export interface NavigationState {
-  view: 'projects' | 'board' | 'world'
+  /** 'viewer': the assembly as someone follows it, step by step. */
+  view: 'projects' | 'board' | 'world' | 'viewer'
+  /** Where closing the viewer goes back to. */
+  viewerFrom: 'projects' | 'board'
   pid: string | null
   aid: string | null
   wmode: WorldMode
@@ -116,6 +119,12 @@ export interface NavigationActions {
   backToProjects: () => void
   openStage: (nodeId: string) => void
   backToBoard: () => void
+  /** Plays a project's steps from the first one (says so when it has
+   *  nothing to play). */
+  openViewer: (pid: string, from: 'projects' | 'board') => void
+  /** Shows a step in the viewer and plays its animation. */
+  viewStep: (stageId: string) => void
+  closeViewer: () => void
   /** Keeps where the working camera was when a stage's 3D view closes. */
   rememberOrbit: (stageId: string, orbit: OrbitView | null) => void
 }

@@ -1,6 +1,6 @@
 import { useEffect, type DragEvent } from 'react'
 
-import { BackIcon, FilmIcon, PlusIcon } from '@/components/icons'
+import { BackIcon, FilmIcon, PlayIcon, PlusIcon } from '@/components/icons'
 import { useStore } from '@/store'
 import { BoardCanvas } from './BoardCanvas'
 import { ColorDialog } from './ColorDialog'
@@ -75,6 +75,7 @@ export function BoardView() {
   const hoverAssembly = useStore((s) => s.hoverAssembly)
   const hoverAnimation = useStore((s) => s.hoverAnimation)
   const setPaletteHover = useStore((s) => s.setPaletteHover)
+  const openViewer = useStore((s) => s.openViewer)
   const boardUndo = useStore((s) => s.boardUndo)
   const boardRedo = useStore((s) => s.boardRedo)
 
@@ -113,13 +114,19 @@ export function BoardView() {
           overflow: 'auto',
         }}
       >
-        <button
-          className="btn btn-ghost"
-          style={{ alignSelf: 'flex-start' }}
-          onClick={backToProjects}
-        >
-          <BackIcon size={15} /> All projects
-        </button>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center' }}>
+          <button className="btn btn-ghost" onClick={backToProjects}>
+            <BackIcon size={15} /> All projects
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            className="btn btn-secondary"
+            title="Follow the assembly step by step, as someone you hand it to would"
+            onClick={() => openViewer(project.id, 'board')}
+          >
+            <PlayIcon size={11} /> View
+          </button>
+        </div>
         <input
           className="input"
           value={project.name}

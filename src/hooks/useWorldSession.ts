@@ -32,10 +32,19 @@ import { buildInput } from '@/lib/three/stageInput'
 import { WorldSession, type PickHit } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import { selectCurrentProject } from '@/store/selectors'
-import type { AppState } from '@/store/types'
+import type { AppState, OrbitView } from '@/store/types'
 import type { MembersRow, Pose, Project, StageMember } from '@/types/project'
 
 let currentSession: WorldSession | null = null
+
+/** Where the viewer was looking from, carried from one step to the next
+ *  (the steps of an assembly share one world). */
+let viewerOrbit: OrbitView | null = null
+
+/** Starts the viewer's next step from the default view. */
+export function resetViewerOrbit(): void {
+  viewerOrbit = null
+}
 
 function onPick(hit: PickHit | null): void {
   const state = useStore.getState()
@@ -323,13 +332,21 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       companionsOf,
     })
     keepParsedMeshes(selectCurrentProject(useStore.getState())?.meshes ?? [])
-    // look from where this stage was left last time
-    const left = stageId ? useStore.getState().stageViews[stageId]?.orbit : null
+    // someone following the assembly only watches; they keep looking from
+    // where they were. An author looks from where the stage was left.
+    const viewing = useStore.getState().view === 'viewer'
+    created.setPresenting(viewing)
+    const left = viewing
+      ? viewerOrbit
+      : stageId
+        ? useStore.getState().stageViews[stageId]?.orbit
+        : null
     if (left) created.holdView(left.pos, left.target)
     currentSession = created
     setSession(created)
     return () => {
-      if (stageId) useStore.getState().rememberOrbit(stageId, created.leftView)
+      if (viewing) viewerOrbit = created.leftView ?? viewerOrbit
+      else if (stageId) useStore.getState().rememberOrbit(stageId, created.leftView)
       created.dispose()
       if (currentSession === created) currentSession = null
       setSession(null)
