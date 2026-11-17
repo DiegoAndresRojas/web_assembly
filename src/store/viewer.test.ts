@@ -136,6 +136,15 @@ describe('the viewer', () => {
     expect(order().slice(0, 2)).toEqual(['anim', 'still'])
   })
 
+  it('shows what the author wrote about each animation', () => {
+    const pid = load(sample())
+    const s = useStore.getState()
+    s.openProject(pid)
+    s.setStageNote('anim', '  Push the gear until it clicks.\n')
+    const scenes = playlistOf(useStore.getState().projects[0], null).scenes
+    expect(scenes.map((x) => x.note)).toEqual(['Push the gear until it clicks.', ''])
+  })
+
   it('opens on the first animation and plays it', () => {
     const pid = load(sample())
     useStore.getState().openViewer(pid, 'projects')

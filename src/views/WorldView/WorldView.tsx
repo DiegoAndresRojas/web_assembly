@@ -24,6 +24,7 @@ export function WorldView({ stageId }: { stageId: string }) {
   const wmode = useStore((s) => s.wmode)
   const backToBoard = useStore((s) => s.backToBoard)
   const renameNode = useStore((s) => s.renameNode)
+  const setStageNote = useStore((s) => s.setStageNote)
 
   const onSession = useCallback((s: WorldSession | null) => setSession(s), [])
   useShortcuts(session)
@@ -80,6 +81,20 @@ export function WorldView({ stageId }: { stageId: string }) {
             />
           </div>
 
+          {wmode === 'animate' && (
+            <textarea
+              className="input note-input"
+              rows={3}
+              style={{ flex: 'none' }}
+              placeholder="Text shown with this animation in a presentation"
+              aria-label="Text shown with this animation"
+              title="What is happening here, for whoever watches the presentation"
+              value={stage.note}
+              // (its keys are its own: no shortcut of the stage reacts)
+              onKeyDown={(e) => e.stopPropagation()}
+              onChange={(e) => setStageNote(stageId, e.target.value)}
+            />
+          )}
           {wmode === 'animate' && (
             <AnimatePanel project={project} stageId={stageId} stage={stage} session={session} />
           )}

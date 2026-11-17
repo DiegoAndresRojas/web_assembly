@@ -76,6 +76,44 @@ describe('undo on the board', () => {
     expect(stageIds()).toEqual([id])
   })
 
+  it('selects several nodes, moves them together and deletes them as one', () => {
+    const s = useStore.getState()
+    s.dropStageOnBoard('assembly', 0, 0)
+    s.dropStageOnBoard('animation', 100, 0)
+    s.dropStageOnBoard('animation', 200, 0)
+    const [a, b, c] = stageIds()
+    const sel = () => useStore.getState()
+
+    s.selectNode(a)
+    expect(sel()).toMatchObject({ selId: a, selIds: [a] })
+    s.toggleNodeSelected(b)
+    // (with several, no single node has the menu)
+    expect(sel()).toMatchObject({ selId: null, selIds: [a, b] })
+    s.toggleNodeSelected(a)
+    expect(sel()).toMatchObject({ selId: b, selIds: [b] })
+    s.selectNodes([a, b, b])
+    expect(sel().selIds).toEqual([a, b])
+
+    s.pushBoardHistory()
+    s.moveNodes([
+      { id: a, x: 10, y: 10 },
+      { id: b, x: 110, y: 10 },
+    ])
+    expect(project().board.nodes.map((n) => [n.x, n.y])).toEqual([
+      [10, 10],
+      [110, 10],
+      [200, 0],
+    ])
+    s.boardUndo()
+    expect(project().board.nodes[0]).toMatchObject({ x: 0, y: 0 })
+
+    s.deleteNodes([a, b])
+    expect(stageIds()).toEqual([c])
+    expect(sel().selIds).toEqual([])
+    s.boardUndo()
+    expect(stageIds()).toEqual([a, b, c])
+  })
+
   it('takes back a frame: drawn, renamed, dragged, deleted', () => {
     const s = useStore.getState()
     const frames = () => project().board.frames

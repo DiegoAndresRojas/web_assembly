@@ -72,6 +72,7 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.zoom = 1
         state.boardFit = true
         state.selId = null
+        state.selIds = []
         state.selEdge = null
         state.selFrame = null
       })

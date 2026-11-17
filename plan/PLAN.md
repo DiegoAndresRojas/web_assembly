@@ -183,9 +183,20 @@ Comprobación manual:
 - ▶ del marco: la barra superior avanza y pasa sola a la siguiente animación; saltar con clic; arrastrar la línea de tiempo inferior.
 - En el visor: mover una pieza, "Reset", y reproducir de nuevo.
 
+### Texto por etapa y selección en el tablero (rama `feat/stage-text-and-board-selection`, sobre la anterior) — pendiente de comprobar a mano
+
+- **Texto por animación** (`stage.note`, esquema 21): se escribe desde el tablero (nodo de animación seleccionado → "Text") o dentro de la animación, encima del panel. El visor lo muestra sobre la línea de tiempo mientras esa animación está abierta.
+- **Selección múltiple:** Shift+clic añade o quita; arrastrar sobre el tablero vacío selecciona lo que rodea (Shift suma); Ctrl+A todo. Arrastrar uno de los seleccionados mueve el grupo; Supr los borra como una sola acción de deshacer.
+- **Nodos de etapa con información:** bajo el nombre, nº de piezas (ensamblaje) o duración y si tiene texto (animación).
+
+Comprobación manual:
+
+- Escribir un texto desde el tablero y desde dentro de la animación; verlo en el visor.
+- Seleccionar varios nodos con el rectángulo y con Shift, moverlos, borrarlos y deshacer.
+
 ### Pendiente de estas ramas
 
-- Fusionar `feat/projects-and-board-ux` y `feat/presentation-frame` en `main` cuando estén comprobadas.
+- Fusionar `feat/projects-and-board-ux`, `feat/presentation-frame` y `feat/stage-text-and-board-selection` en `main` cuando estén comprobadas (cada una contiene a la anterior).
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes

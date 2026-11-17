@@ -21,11 +21,13 @@ import {
   type Rect,
 } from '@/lib/frames'
 import { stageName } from '@/lib/cameras'
+import { stageDuration } from '@/lib/timeline'
 import { useStore } from '@/store'
-import type { NodeKind, Project } from '@/types/project'
+import type { BoardNode as BoardNodeData, NodeKind, Project } from '@/types/project'
 import { BoardNode } from './BoardNode'
 import { EdgeLayer } from './EdgeLayer'
 import { FrameBox } from './FrameBox'
+import { NoteDialog } from './NoteDialog'
 import { BoardToolSwitcher, BoardZoomControls } from './Toolbar'
 
 export interface BoardCanvasProps {
@@ -36,6 +38,8 @@ interface DragAnchor {
   nodeId: string
   x0: number
   y0: number
+  /** Every node that moves with it (itself included): where each was. */
+  items: Array<{ id: string; x0: number; y0: number }>
   px: number
   py: number
   /** Whether the node has left where the drag found it. */
@@ -52,6 +56,20 @@ interface FrameDrag {
   moved: boolean
 }
 
+/** What a stage node says under its name: how much goes into an
+ *  assembly; how long an animation lasts, and whether it has a text. */
+function stageInfo(project: Project, node: BoardNodeData): string | null {
+  if (node.kind === 'mesh') return null
+  const inputs = project.board.edges.filter((e) => e.to === node.id).length
+  if (node.kind === 'assembly') {
+    return inputs === 0 ? 'empty' : inputs === 1 ? '1 part' : `${inputs} parts`
+  }
+  const stage = project.stages[node.id]
+  const seconds = stage ? stageDuration(stage) : 0
+  const length = seconds > 0 ? `${Math.round(seconds * 10) / 10} s` : 'no motion'
+  return stage?.note.trim() ? `${length} · text` : length
+}
+
 export function BoardCanvas({ project }: BoardCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const panStartRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null)
@@ -61,14 +79,23 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
    *  rectangle so far. */
   const drawRef = useRef<{ x: number; y: number } | null>(null)
   const [drawing, setDrawing] = useState<Rect | null>(null)
+  /** A rectangle being dragged over the board to select what is in it:
+   *  where it started, and what was already selected (Shift adds to it). */
+  const marqueeRef = useRef<{ x: number; y: number; base: string[] } | null>(null)
+  const [marquee, setMarquee] = useState<Rect | null>(null)
+  /** The animation whose text is being written. */
+  const [noteFor, setNoteFor] = useState<string | null>(null)
 
   const pan = useStore((s) => s.pan)
   const zoom = useStore((s) => s.zoom)
   const hover = useStore((s) => s.hover)
   const selId = useStore((s) => s.selId)
+  const selIds = useStore((s) => s.selIds)
+  const toggleNodeSelected = useStore((s) => s.toggleNodeSelected)
+  const selectNodes = useStore((s) => s.selectNodes)
+  const moveNodes = useStore((s) => s.moveNodes)
   const effectiveTool = useStore((s) => s.effectiveTool)
   const setPan = useStore((s) => s.setPan)
-  const moveNode = useStore((s) => s.moveNode)
   const linkIfDropped = useStore((s) => s.linkIfDropped)
   const selectNode = useStore((s) => s.selectNode)
   const hoverNode = useStore((s) => s.hoverNode)
@@ -130,12 +157,17 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
       panStartRef.current = { x: e.clientX, y: e.clientY, pan: { ...pan } }
       return
     }
-    selectNode(null)
+    const p = pointFromEvent(e.clientX, e.clientY)
     if (effectiveTool() === 'frame') {
-      const p = pointFromEvent(e.clientX, e.clientY)
+      selectNode(null)
       drawRef.current = p
       setDrawing({ x: p.x, y: p.y, w: 0, h: 0 })
+      return
     }
+    // a drag over the empty board selects what it goes around
+    const base = e.shiftKey ? selIds : []
+    if (!e.shiftKey) selectNode(null)
+    marqueeRef.current = { ...p, base }
   }
   const handleBoardMove = (e: ReactPointerEvent) => {
     if (panStartRef.current) {
@@ -147,6 +179,19 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
     if (drawRef.current) {
       const p = pointFromEvent(e.clientX, e.clientY)
       setDrawing(rectFrom(drawRef.current.x, drawRef.current.y, p.x, p.y))
+      return
+    }
+    if (marqueeRef.current) {
+      const from = marqueeRef.current
+      const p = pointFromEvent(e.clientX, e.clientY)
+      const rect = rectFrom(from.x, from.y, p.x, p.y)
+      setMarquee(rect)
+      const inside = project.board.nodes
+        .filter(
+          (n) => n.x >= rect.x && n.x <= rect.x + rect.w && n.y >= rect.y && n.y <= rect.y + rect.h,
+        )
+        .map((n) => n.id)
+      selectNodes([...from.base, ...inside])
       return
     }
     if (frameDragRef.current) {
@@ -167,11 +212,9 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
       // the whole drag is one thing to undo: where the node was before it
       if (!dragRef.current.moved) pushBoardHistory()
       dragRef.current.moved = true
-      moveNode(
-        dragRef.current.nodeId,
-        dragRef.current.x0 + (p.x - dragRef.current.px),
-        dragRef.current.y0 + (p.y - dragRef.current.py),
-      )
+      const dx = p.x - dragRef.current.px
+      const dy = p.y - dragRef.current.py
+      moveNodes(dragRef.current.items.map((it) => ({ id: it.id, x: it.x0 + dx, y: it.y0 + dy })))
       return
     }
     if (linking) {
@@ -183,6 +226,11 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
     panStartRef.current = null
     dragRef.current = null
     frameDragRef.current = null
+    if (marqueeRef.current) {
+      marqueeRef.current = null
+      setMarquee(null)
+      return
+    }
     if (drawRef.current) {
       const p = pointFromEvent(e.clientX, e.clientY)
       const rect = rectFrom(drawRef.current.x, drawRef.current.y, p.x, p.y)
@@ -298,6 +346,12 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             style={{ left: drawing.x, top: drawing.y, width: drawing.w, height: drawing.h }}
           />
         )}
+        {marquee && (
+          <div
+            className="board-marquee"
+            style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+          />
+        )}
         <EdgeLayer project={project} />
         {project.board.nodes.map((node) => (
           <BoardNode
@@ -308,18 +362,35 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
                 ? (project.meshes.find((m) => m.id === node.meshId) ?? null)
                 : null
             }
-            selected={selId === node.id}
+            selected={selIds.includes(node.id)}
+            alone={selId === node.id}
             hovered={hover === node.id}
             framed={places.get(node.id) ?? null}
+            info={stageInfo(project, node)}
+            onNote={(e) => {
+              e.stopPropagation()
+              setNoteFor(node.id)
+            }}
             onPointerDown={(e) => {
               e.stopPropagation()
-              selectNode(node.id)
+              // Shift+click adds it to the selection, or takes it out
+              if (e.shiftKey) {
+                toggleNodeSelected(node.id)
+                return
+              }
+              // one of several selected: they are dragged together
+              const group = selIds.length > 1 && selIds.includes(node.id)
+              if (!group) selectNode(node.id)
               if (effectiveTool() === 'select') {
                 const p = pointFromEvent(e.clientX, e.clientY)
+                const moving = group
+                  ? project.board.nodes.filter((n) => selIds.includes(n.id))
+                  : [node]
                 dragRef.current = {
                   nodeId: node.id,
                   x0: node.x,
                   y0: node.y,
+                  items: moving.map((n) => ({ id: n.id, x0: n.x, y0: n.y })),
                   px: p.x,
                   py: p.y,
                   moved: false,
@@ -329,7 +400,9 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             onPointerUp={() => {
               // only a real drag-and-drop links; a click never does
               const d = dragRef.current
-              if (d && Math.hypot(node.x - d.x0, node.y - d.y0) > 2) linkIfDropped(d.nodeId)
+              if (d && d.items.length === 1 && Math.hypot(node.x - d.x0, node.y - d.y0) > 2) {
+                linkIfDropped(d.nodeId)
+              }
               dragRef.current = null
             }}
             onPointerEnter={() => hoverNode(node.id)}
@@ -363,6 +436,12 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
         ))}
       </div>
 
+      {selIds.length > 1 && (
+        <div className="board-selection" role="status">
+          {selIds.length} selected — drag one to move them all, Delete removes them
+        </div>
+      )}
+      <NoteDialog project={project} stageId={noteFor} onClose={() => setNoteFor(null)} />
       <BoardToolSwitcher />
       <BoardZoomControls onFit={fit} />
       {project.board.nodes.length + project.board.frames.length === 0 && (

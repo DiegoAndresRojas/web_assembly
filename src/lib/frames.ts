@@ -135,6 +135,8 @@ export interface Scene {
   title: string
   /** Seconds its animation lasts (0: nothing moves in it). */
   duration: number
+  /** What the author says about it ('' when nothing). */
+  note: string
 }
 
 export interface Playlist {
@@ -149,7 +151,12 @@ export interface Playlist {
 export function playlistOf(project: Project, frameId: string | null): Playlist {
   const scene = (node: BoardNode): Scene => {
     const stage = project.stages[node.id]
-    return { stageId: node.id, title: stageName(node), duration: stage ? stageDuration(stage) : 0 }
+    return {
+      stageId: node.id,
+      title: stageName(node),
+      duration: stage ? stageDuration(stage) : 0,
+      note: stage?.note.trim() ?? '',
+    }
   }
   const frames = project.board.frames
   const frame = frameId

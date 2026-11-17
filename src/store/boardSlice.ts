@@ -32,6 +32,7 @@ export const initialBoardState: BoardState = {
   ctrlDown: false,
   hover: null,
   selId: null,
+  selIds: [],
   selEdge: null,
   selFrame: null,
   linking: null,
@@ -51,6 +52,13 @@ function takeChainStartPoses(project: Draft<Project>, fromId: string, toId: stri
   // …and it is lit the way the animation before it was (unless it already
   // has lighting of its own)
   recoverLightsFromChain(project, toId)
+}
+
+/** Makes these nodes the selected ones. `selId` is the one node there
+ *  is to act on alone (its menu, its handles): null with several. */
+function setSelection(state: Draft<BoardState>, ids: string[]): void {
+  state.selIds = ids
+  state.selId = ids.length === 1 ? ids[0] : null
 }
 
 function nodeBox(kind: NodeKind, x: number, y: number) {
@@ -218,9 +226,49 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     },
     selectNode(nodeId) {
       set((state) => {
-        state.selId = nodeId
+        setSelection(state, nodeId ? [nodeId] : [])
         state.selEdge = null
         state.selFrame = null
+      })
+    },
+    deleteNodes(nodeIds) {
+      for (const id of nodeIds) actions.deleteNode(id)
+    },
+    toggleNodeSelected(nodeId) {
+      set((state) => {
+        setSelection(
+          state,
+          state.selIds.includes(nodeId)
+            ? state.selIds.filter((id) => id !== nodeId)
+            : [...state.selIds, nodeId],
+        )
+        state.selEdge = null
+        state.selFrame = null
+      })
+    },
+    selectNodes(nodeIds) {
+      set((state) => {
+        setSelection(state, [...new Set(nodeIds)])
+        state.selEdge = null
+        state.selFrame = null
+      })
+    },
+    moveNodes(moves) {
+      set((state) => {
+        const nodes = findProject(state, state.pid)?.board.nodes ?? []
+        for (const move of moves) {
+          const node = nodes.find((n) => n.id === move.id)
+          if (node) {
+            node.x = move.x
+            node.y = move.y
+          }
+        }
+      })
+    },
+    setStageNote(stageId, note) {
+      set((state) => {
+        const stage = findProject(state, state.pid)?.stages[stageId]
+        if (stage && stage.note !== note) stage.note = note
       })
     },
     hoverNode(nodeId) {
@@ -241,7 +289,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const id = duplicateNode(project, nodeId)
         if (!id) return
         reconcileProject(project)
-        state.selId = id
+        setSelection(state, [id])
       })
     },
     deleteNode(nodeId) {
@@ -258,7 +306,10 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         // meshes and upstream assemblies are both stage inputs — whatever
         // any stage held about the deleted node goes with its edges
         reconcileProject(project)
-        if (state.selId === nodeId) state.selId = null
+        setSelection(
+          state,
+          state.selIds.filter((id) => id !== nodeId),
+        )
       })
     },
 
@@ -309,7 +360,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     selectEdge(edgeId) {
       set((state) => {
         state.selEdge = edgeId
-        state.selId = null
+        setSelection(state, [])
         state.selFrame = null
       })
     },
@@ -352,7 +403,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const project = findProject(state, state.pid)
         if (!project) return
         state.selFrame = addFrame(project, rect).id
-        state.selId = null
+        setSelection(state, [])
         state.selEdge = null
       })
     },
@@ -360,7 +411,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       set((state) => {
         state.selFrame = frameId
         if (frameId) {
-          state.selId = null
+          setSelection(state, [])
           state.selEdge = null
         }
       })
@@ -434,6 +485,15 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       // a stage goes with everything made inside it: say how to get it back
       if (node && node.kind !== 'mesh') {
         get().notify(`${stageName(node)} deleted — Ctrl+Z brings it back.`, 'info')
+      }
+    },
+    deleteNodes(nodeIds) {
+      const before = get().projects.find((p) => p.id === get().pid)?.board.nodes.length ?? 0
+      // (all of them are one thing to undo)
+      recordBoardEdit(get, set, () => nodeIds.forEach((id) => actions.deleteNode(id)))
+      const after = get().projects.find((p) => p.id === get().pid)?.board.nodes.length ?? 0
+      if (before > after) {
+        get().notify(`${before - after} nodes deleted — Ctrl+Z brings them back.`, 'info')
       }
     },
     completeLinking: recorded(actions.completeLinking),

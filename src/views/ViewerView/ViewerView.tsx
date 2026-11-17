@@ -230,6 +230,11 @@ export function ViewerView({ stageId }: { stageId: string }) {
       </header>
 
       <footer className="viewer-bottom">
+        {scene.note && (
+          <p className="viewer-caption" aria-live="polite">
+            {scene.note}
+          </p>
+        )}
         <Seek duration={duration} />
         <div className="viewer-controls">
           <button

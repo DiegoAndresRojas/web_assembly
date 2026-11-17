@@ -88,10 +88,12 @@ export function BoardView() {
       const state = useStore.getState()
       // (a dialog that is open has the keyboard)
       if (state.confirm || state.colorEdit || state.scaleEdit) return
+      if (document.querySelector('.dialog')) return
       if (!(e.ctrlKey || e.metaKey)) {
         // Delete removes what is selected; Escape lets go of it
         if (e.key === 'Delete' || e.key === 'Backspace') {
           if (state.selEdge) state.deleteSelectedEdge()
+          else if (state.selIds.length > 1) state.deleteNodes(state.selIds)
           else if (state.selId) state.deleteNode(state.selId)
           else if (state.selFrame) state.deleteFrame(state.selFrame)
           else return
@@ -104,6 +106,13 @@ export function BoardView() {
         return
       }
       const key = e.key.toLowerCase()
+      if (key === 'a') {
+        // Ctrl+A: every node on the board
+        e.preventDefault()
+        const open = state.projects.find((p) => p.id === state.pid)
+        state.selectNodes(open?.board.nodes.map((n) => n.id) ?? [])
+        return
+      }
       if (key !== 'z' && key !== 'y') return
       e.preventDefault()
       if (key === 'y' || e.shiftKey) boardRedo()

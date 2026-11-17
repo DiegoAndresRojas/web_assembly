@@ -17,8 +17,13 @@ const STAGE_COLOR: Record<string, string> = {
 export interface BoardNodeProps {
   node: BoardNodeData
   mesh: MeshRecord | null
+  /** Selected — `alone` when it is the only node that is: its menu and
+   *  handles show. */
   selected: boolean
+  alone: boolean
   hovered: boolean
+  /** Stage nodes: what is in it, under its name ("3 parts", "4.2 s"). */
+  info: string | null
   /** Its place in the presentation frame it stands in (1-based); null
    *  when it is in none. */
   framed: number | null
@@ -33,13 +38,17 @@ export interface BoardNodeProps {
   onColor: (e: PointerEvent) => void
   onScale: (e: PointerEvent) => void
   onLinkStart: (e: PointerEvent) => void
+  /** Animations: write the text shown with it. */
+  onNote: (e: PointerEvent) => void
 }
 
 export function BoardNode({
   node,
   mesh,
   selected,
+  alone,
   hovered,
+  info,
   framed,
   onPointerDown,
   onPointerUp,
@@ -52,19 +61,22 @@ export function BoardNode({
   onColor,
   onScale,
   onLinkStart,
+  onNote,
 }: BoardNodeProps) {
   const isMesh = node.kind === 'mesh'
   const w = isMesh ? MESH_W : NODE_W
   const h = isMesh ? MESH_H : NODE_W
-  const showHandles = isMesh && (hovered || selected)
+  const showHandles = isMesh && (hovered || alone)
   // an animation only takes inputs: nothing comes out of it
-  const showOut = node.kind === 'assembly' && (hovered || selected)
+  const showOut = node.kind === 'assembly' && (hovered || alone)
   const color = STAGE_COLOR[node.kind] ?? STAGE_COLOR.assembly
 
   return (
     <div
       data-node="board"
+      className={selected ? 'board-node--sel' : undefined}
       style={{
+        borderRadius: isMesh ? 'var(--radius-md)' : '50%',
         position: 'absolute',
         left: node.x - w / 2,
         top: node.y - h / 2,
@@ -77,7 +89,7 @@ export function BoardNode({
       onPointerLeave={onPointerLeave}
       onDoubleClick={onDoubleClick}
     >
-      {selected && (
+      {alone && (
         <div
           style={{
             position: 'absolute',
@@ -115,6 +127,16 @@ export function BoardNode({
                 Scale
               </button>
             </>
+          )}
+          {node.kind === 'animation' && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 12 }}
+              title="The text shown with this animation in a presentation"
+              onPointerDown={onNote}
+            >
+              Text
+            </button>
           )}
           <button className="btn btn-ghost" style={{ fontSize: 12 }} onPointerDown={onDuplicate}>
             Duplicate
@@ -295,9 +317,12 @@ export function BoardNode({
               marginTop: 4,
               fontSize: 10,
               whiteSpace: 'nowrap',
+              textAlign: 'center',
+              lineHeight: 1.45,
             }}
           >
-            {stageName(node)}
+            <div style={{ color: 'var(--color-neutral-300)' }}>{stageName(node)}</div>
+            {info && <div>{info}</div>}
           </div>
         </>
       )}

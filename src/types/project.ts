@@ -202,6 +202,9 @@ export interface Stage {
   lights: StageLight[]
   environment: StageEnvironment | null
   floor: StageFloor | null
+  /** Animation stages: what is happening, told to whoever watches it
+   *  played (shown under it in the viewer). */
+  note: string
 }
 
 /** A piece of an assembly input taken out of the pose it was assembled in.

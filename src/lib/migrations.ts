@@ -58,9 +58,10 @@ import type {
 // 19: presentations are frames drawn on the board around the animations
 //     they play (board.frames); the list of steps is gone.
 // 20: a frame may hold the order its animations play in (order).
+// 21: stages have a text for whoever watches them (note).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 20
+export const CURRENT_VERSION = 21
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -318,6 +319,7 @@ export function normalizeStage(raw: unknown): Stage {
     lights,
     environment: normalizeEnvironment(s.environment),
     floor: normalizeFloor(s.floor),
+    note: typeof s.note === 'string' ? s.note : '',
   }
 }
 

@@ -152,7 +152,10 @@ export interface BoardState {
   tool: BoardTool
   ctrlDown: boolean
   hover: string | null
+  /** The one selected node; null when none or several are. */
   selId: string | null
+  /** Every selected node. */
+  selIds: string[]
   selEdge: string | null
   selFrame: string | null
   linking: LinkingDraft | null
@@ -184,6 +187,15 @@ export interface BoardActions {
   moveNode: (nodeId: string, x: number, y: number) => void
   linkIfDropped: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
+  /** Adds a node to the selection, or takes it out (Shift+click). */
+  toggleNodeSelected: (nodeId: string) => void
+  selectNodes: (nodeIds: string[]) => void
+  /** Puts several nodes where they are told at once (a group's drag). */
+  moveNodes: (moves: Array<{ id: string; x: number; y: number }>) => void
+  /** Deletes several nodes as one thing to undo. */
+  deleteNodes: (nodeIds: string[]) => void
+  /** What an animation tells whoever watches it, in the author's words. */
+  setStageNote: (stageId: string, note: string) => void
   hoverNode: (nodeId: string | null) => void
   /** Names a stage node (what its row, breadcrumb and imports show). */
   renameNode: (nodeId: string, label: string) => void

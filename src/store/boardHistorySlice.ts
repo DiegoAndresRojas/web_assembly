@@ -63,7 +63,8 @@ function put(set: Set, snapshot: Snapshot): void {
     project.meshes = snapshot.meshes
     project.board = snapshot.board
     project.stages = snapshot.stages
-    if (!snapshot.board.nodes.some((n) => n.id === state.selId)) state.selId = null
+    state.selIds = state.selIds.filter((id) => snapshot.board.nodes.some((n) => n.id === id))
+    state.selId = state.selIds.length === 1 ? state.selIds[0] : null
     if (!snapshot.board.frames.some((f) => f.id === state.selFrame)) state.selFrame = null
     if (!snapshot.board.edges.some((e) => e.id === state.selEdge)) state.selEdge = null
     state.linking = null
