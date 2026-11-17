@@ -31,8 +31,6 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
   const cancelKpEdit = useStore((s) => s.cancelKpEdit)
   const removeLink = useStore((s) => s.removeLink)
   const setKpRotAxis = useStore((s) => s.setKpRotAxis)
-  const doUnion = useStore((s) => s.doUnion)
-  const undoUnion = useStore((s) => s.undoUnion)
   const openDownload = useStore((s) => s.openDownload)
 
   const editingLink = kpEditing ? stage.links.find((l) => l.id === kpEditing) : null
@@ -208,12 +206,7 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
               {stage.links.map((l) => {
                 const nameA = inputLabel(project, l.nodeA)
                 const nameB = inputLabel(project, l.nodeB)
-                const color =
-                  l.state === 'solved'
-                    ? '#7ac08f'
-                    : l.state === 'gap'
-                      ? '#e06a6a'
-                      : 'var(--color-neutral-400)'
+                const color = l.state === 'solved' ? '#7ac08f' : '#e06a6a'
                 return (
                   <tr key={l.id}>
                     <td
@@ -238,7 +231,7 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
                         }}
                       >
                         <span style={{ fontSize: 10, color }}>
-                          {l.state === 'solved' ? 'Solved' : l.state === 'gap' ? 'Gap' : 'Pending'}
+                          {l.state === 'solved' ? 'Solved' : 'Gap'}
                         </span>
                         <div
                           title="Delete constraint"
@@ -272,22 +265,11 @@ export function KeypointEditor({ project, stage }: KeypointEditorProps) {
           marginTop: 'var(--space-4)',
         }}
       >
-        {/* one toggle: pressed while the pieces are united */}
-        <Button
-          variant="secondary"
-          className={stage.union ? 'btn--on' : ''}
-          aria-pressed={!!stage.union}
-          style={{ flex: 2, fontSize: 11 }}
-          disabled={!stage.union && stage.links.length === 0}
-          title={stage.union ? 'United — click to cancel the union' : 'Unite the linked pieces'}
-          onClick={stage.union ? undoUnion : doUnion}
-        >
-          {stage.union ? '✓ United' : 'Union'}
-        </Button>
         <Button
           variant="secondary"
           style={{ flex: 1, fontSize: 11 }}
-          disabled={!stage.union}
+          disabled={stage.members.length === 0}
+          title="Download the assembly as it stands, as one mesh file"
           onClick={openDownload}
         >
           Download

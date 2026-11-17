@@ -1,4 +1,5 @@
-import { keyRefersTo, membersOf, parentKey } from '@/lib/graph'
+import { keyRefersTo, parentKey } from '@/lib/graph'
+import { reconcileProject, reconcileStage } from '@/lib/stageInputs'
 import { clamp } from '@/lib/utils'
 import { ensureStage, findProject, stageKindFromNode } from './helpers'
 import type { Set, WorldActions, WorldState } from './types'
@@ -78,24 +79,9 @@ export function createWorldSlice(set: Set): WorldActions {
         project.board.edges = project.board.edges.filter(
           (e) => !(e.from === nodeId && e.to === aid),
         )
-        const stage = project.stages[aid]
-        if (stage) {
-          stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
-          stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
-          for (const key of Object.keys(stage.partLooks ?? {})) {
-            if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
-          }
-          for (const key of Object.keys(stage.startPoses)) {
-            if (keyRefersTo(key, nodeId)) delete stage.startPoses[key]
-          }
-          // (pieces released from the removed input go with it)
-          for (const key of Object.keys(stage.partOverrides)) {
-            if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]
-          }
-          stage.links = stage.links.filter(
-            (l) => !keyRefersTo(l.nodeA, nodeId) && !keyRefersTo(l.nodeB, nodeId),
-          )
-        }
+        // what this stage — and the stages it feeds — held about the input
+        // goes with the edge
+        reconcileProject(project)
         if (state.worldSelId && keyRefersTo(state.worldSelId, nodeId)) state.worldSelId = null
       })
     },
@@ -113,19 +99,8 @@ export function createWorldSlice(set: Set): WorldActions {
       set((state) => {
         const project = findProject(state, state.pid)
         if (!project) return
-        const stage = ensureStage(project, stageId, stageKindFromNode(project, stageId))
-        const rows = membersOf(project, stageId)
-        rows.forEach((row) => {
-          if (!stage.members.some((m) => m.nodeId === row.node.id)) {
-            stage.members.push({
-              nodeId: row.node.id,
-              visible: true,
-              opacity: 1,
-              pose: { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } },
-              color: null,
-            })
-          }
-        })
+        ensureStage(project, stageId, stageKindFromNode(project, stageId))
+        reconcileStage(project, stageId)
       })
     },
   }

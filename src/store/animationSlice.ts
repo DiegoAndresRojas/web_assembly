@@ -132,16 +132,9 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
           )
           return
         }
-        if (!stage.members.some((m) => m.nodeId === nodeId)) {
-          stage.members.push({
-            nodeId,
-            visible: true,
-            opacity: 1,
-            pose: { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } },
-            color: null,
-          })
-        }
-        const member = stage.members.find((m) => m.nodeId === nodeId)!
+        // (every input has its row: lib/stageInputs.ts)
+        const member = stage.members.find((m) => m.nodeId === nodeId)
+        if (!member) return
         stage.tracks.push(
           normalizeTrack({
             targetKind: 'mesh',
@@ -161,7 +154,6 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
           stage.camera = {
             name: DEFAULT_CAMERA_NAME,
             pose: currentCameraPose ?? { pos: { x: 4, y: 3, z: 5 }, rot: { x: 0, y: 0, z: 0 } },
-            tracked: true,
           }
         }
         if (!stage.tracks.some((t) => t.targetKind === 'camera')) {
@@ -189,7 +181,7 @@ export function createAnimationSlice(set: Set, get: Get): AnimationActions {
         if (!stage) return
         // a camera made by importing takes the name it came with; one that
         // was already here keeps its own and only starts somewhere else
-        if (!stage.camera) stage.camera = { name: source.name, pose, tracked: true }
+        if (!stage.camera) stage.camera = { name: source.name, pose }
         else stage.camera.pose = pose
         const track = stage.tracks.find((t) => t.targetKind === 'camera')
         if (track) track.initPose = clonePose(pose)

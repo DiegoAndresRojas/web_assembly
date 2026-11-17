@@ -295,8 +295,6 @@ export interface AssemblyActions {
   closeKpEdit: () => void
   cancelKpEdit: () => void
   setKpRotAxis: (axis: Axis, value: number) => void
-  doUnion: () => void
-  undoUnion: () => void
 }
 
 // ---------- animation ----------

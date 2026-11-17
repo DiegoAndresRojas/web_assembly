@@ -1,6 +1,7 @@
 // Schema versioning + defensive normalization for the persisted payload.
 // Typed port of only_js/src/store/migrations.js — the store's Zustand
 // `persist` middleware calls `run()` as its `migrate` function.
+import { reconcileProject } from './stageInputs'
 import { clamp, num, uid } from './utils'
 import { DEFAULT_FRAME_FORMAT, isFrameFormat } from './videoFormat'
 import type {
@@ -49,9 +50,12 @@ import type {
 //     hash of their contents; a mesh saved with its file inside keeps it
 //     until it is moved there.
 // 16: projects have a sequence of steps (steps).
+// 17: the board's edges alone say what a stage takes in — stage records
+//     are brought in line with them; fields nothing used are gone (union,
+//     camera.tracked, mesh origin / color, member color, 'pending' links).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 16
+export const CURRENT_VERSION = 17
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -71,11 +75,9 @@ export function normalizeMesh(raw: unknown): MeshRecord | null {
     id: typeof m.id === 'string' && m.id ? m.id : uid(),
     name: typeof m.name === 'string' && m.name ? m.name : 'mesh',
     ext: typeof m.ext === 'string' ? m.ext.toLowerCase() : '',
-    origin: 'original',
     hash: typeof m.hash === 'string' && m.hash ? m.hash : null,
     bytes: Math.max(0, num(m.bytes, 0)),
     data: typeof m.data === 'string' ? m.data : null,
-    color: typeof m.color === 'string' ? m.color : null,
     size: m.size && typeof m.size === 'object' ? asVec3(m.size) : null,
   }
 }
@@ -121,7 +123,6 @@ export function normalizeMember(raw: unknown): StageMember | null {
     visible: m.visible !== false,
     opacity: clamp(num(m.opacity, 1), 0.05, 1),
     pose: normalizePose(m.pose),
-    color: typeof m.color === 'string' ? m.color : null,
   }
 }
 
@@ -131,7 +132,8 @@ export function normalizeLink(raw: unknown): KeypointLink | null {
   if (typeof l.nodeA !== 'string' || typeof l.nodeB !== 'string' || !l.nodeA || !l.nodeB)
     return null
   const axis = l.axis === 'x' || l.axis === 'z' ? l.axis : 'y'
-  const state = l.state === 'solved' || l.state === 'gap' ? l.state : 'pending'
+  // (a link is solved as it is made; one saved without knowing reads as not touching)
+  const state = l.state === 'solved' ? 'solved' : 'gap'
   return {
     id: typeof l.id === 'string' && l.id ? l.id : uid(),
     nodeA: l.nodeA,
@@ -282,7 +284,6 @@ export function normalizeStage(raw: unknown): Stage {
       ? {
           name: cameraName((s.camera as Record<string, unknown>).name),
           pose: normalizePose((s.camera as Record<string, unknown>).pose),
-          tracked: !!(s.camera as Record<string, unknown>).tracked,
         }
       : null
   const lights = Array.isArray(s.lights)
@@ -306,7 +307,6 @@ export function normalizeStage(raw: unknown): Stage {
           .filter((t): t is Track => !!t)
           .filter((t) => t.targetKind !== 'light' || lightKeys.has(t.nodeId ?? ''))
       : [],
-    union: s.union && typeof s.union === 'object' ? (s.union as { at: number }) : null,
     partLooks: normalizePartLooks(s.partLooks),
     partOverrides: normalizePartOverrides(s.partOverrides),
     startPoses: normalizeStartPoses(s.startPoses),
@@ -355,18 +355,19 @@ export function normalizeProject(raw: unknown): Project | null {
     }
   }
 
-  const meshes = Array.isArray(p.meshes)
-    ? p.meshes.map(normalizeMesh).filter((m): m is MeshRecord => !!m)
-    : []
+  const rawMeshes: unknown[] = Array.isArray(p.meshes) ? p.meshes : []
+  const meshes = rawMeshes.map(normalizeMesh).filter((m): m is MeshRecord => !!m)
   // color used to live on the library mesh (shared by every node of that
   // file) — hand it down to each node, which now owns its color
   for (const n of nodes) {
     if (n.kind !== 'mesh' || n.color) continue
-    n.color = meshes.find((m) => m.id === n.meshId)?.color ?? null
+    const old = rawMeshes.find(
+      (m) => !!m && typeof m === 'object' && (m as Record<string, unknown>).id === n.meshId,
+    ) as Record<string, unknown> | undefined
+    n.color = typeof old?.color === 'string' ? old.color : null
   }
-  for (const m of meshes) m.color = null
 
-  return {
+  const project: Project = {
     id: typeof p.id === 'string' && p.id ? p.id : uid(),
     name: typeof p.name === 'string' && p.name ? p.name : 'Project',
     meshes,
@@ -374,6 +375,10 @@ export function normalizeProject(raw: unknown): Project | null {
     stages,
     steps: normalizeSteps(p.steps, nodes),
   }
+  // what a stage holds about its inputs follows the board's edges: a row
+  // for each input, nothing about a piece that is not wired in any more
+  reconcileProject(project)
+  return project
 }
 
 /** The steps whose stage is still on the board, each stage once. */

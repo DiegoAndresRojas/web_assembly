@@ -49,7 +49,8 @@ describe('normalizeProject', () => {
       board: { nodes: [{ id: 'm1', kind: 'mesh', meshId: 'file' }] },
     })
     expect(p?.board.nodes[0].color).toBe('#ff0000')
-    expect(p?.meshes[0]).toMatchObject({ color: null, ext: 'stl' })
+    expect(p?.meshes[0]).toMatchObject({ ext: 'stl' })
+    expect(p?.meshes[0]).not.toHaveProperty('color')
   })
 })
 

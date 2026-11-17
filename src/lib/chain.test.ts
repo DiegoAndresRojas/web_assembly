@@ -125,8 +125,10 @@ describe('recoverFromChain — taking up from the animation before', () => {
   it('starts a piece mounted earlier where the last animation left it', () => {
     const p = animated()
     recoverFromChain(p, 'anim2', null)
-    expect(Object.keys(held(p))).toEqual([INNER])
+    expect(Object.keys(held(p))).toEqual(['asm2', INNER])
     expect(x(held(p)[INNER])).toBeCloseTo(7)
+    // (asm2 holds asm1 at x = 10: lined up with where anim1 showed asm1)
+    expect(x(held(p)['asm2'])).toBeCloseTo(-10)
   })
 
   it('counts an animation that only set where a piece starts', () => {
@@ -157,7 +159,8 @@ describe('recoverFromChain — taking up from the animation before', () => {
       },
     })
     recoverFromChain(p, 'anim2', null)
-    expect(held(p)).toEqual({})
+    expect(held(p)[INNER]).toBeUndefined()
+    expect(held(p)['asm2/piece2']).toBeUndefined()
   })
 
   it('never replaces a start pose the animation already holds', () => {
@@ -178,7 +181,7 @@ describe('recoverFromChain — taking up from the animation before', () => {
     const p = animated()
     p.stages.asm2.partOverrides['asm1/piece1'] = { free: false, pose: pose(3) }
     recoverFromChain(p, 'anim2', null)
-    expect(held(p)).toEqual({})
+    expect(held(p)[INNER]).toBeUndefined()
   })
 
   describe('three stages deep', () => {
@@ -243,7 +246,7 @@ describe('recoverFromChain — taking up from the animation before', () => {
 describe('importedPoses — from another animation', () => {
   it('matches a piece nested deeper here and takes where the other ends', () => {
     const poses = importedPoses(animated(), 'anim2', 'anim1', 'end')
-    expect(Object.keys(poses)).toEqual([INNER])
+    expect(Object.keys(poses)).toEqual(['asm2', INNER])
     expect(x(poses[INNER])).toBeCloseTo(7)
   })
 
@@ -289,16 +292,18 @@ describe('importedPoses — from another animation', () => {
 
   it('lists the animations that share pieces with the open one', () => {
     const p = animated()
-    expect(poseSources(p, 'anim2')).toEqual([{ stageId: 'anim1', pieces: 1 }])
+    // (piece1, and asm2 itself — lined up with where anim1 shows asm1)
+    expect(poseSources(p, 'anim2')).toEqual([{ stageId: 'anim1', pieces: 2 }])
     // and the other way round: piece1 is the one piece anim1 has
     expect(poseSources(p, 'anim1')).toEqual([{ stageId: 'anim2', pieces: 1 }])
   })
 
   it('counts how many pieces an import would actually move', () => {
     const p = animated()
-    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'end'))).toBe(1)
-    // where anim1 starts is where the assembly has the piece: nothing moves
-    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'start'))).toBe(0)
+    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'end'))).toBe(2)
+    // where anim1 starts is where the assembly has the piece: only asm2
+    // moves, to line up with it
+    expect(movedBy(p, 'anim2', importedPoses(p, 'anim2', 'anim1', 'start'))).toBe(1)
   })
 })
 
@@ -353,7 +358,6 @@ describe('importedPoses — the same pieces reached through other assemblies', (
       visible: true,
       opacity: 1,
       pose: pose(40),
-      color: null,
     })
     p.stages.animA.tracks = []
     // two candidates over there (direct, and inside asmA): either is the piece

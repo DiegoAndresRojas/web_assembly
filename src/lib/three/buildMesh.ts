@@ -64,7 +64,7 @@ async function parseMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
   } else {
     const geometry = new STLLoader().parse(bytes)
     geometry.computeVertexNormals()
-    wrap.add(new THREE.Mesh(geometry, defaultMaterial(meshRecord.color)))
+    wrap.add(new THREE.Mesh(geometry, defaultMaterial()))
   }
   return centerMesh(wrap)
 }

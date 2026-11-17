@@ -208,7 +208,6 @@ function sceneEntries(project: Project, stageId: string): SceneEntry[] {
     const asm = entries.find((e) => e.key === asmId && !e.row.mesh)
     const row = deeper.length ? null : membersOf(project, asmId).find((r) => r.node.id === pieceId)
     if (!asm || !row) continue
-    const assembled = project.stages[asmId]?.members.find((m) => m.nodeId === pieceId)
     entries.push({
       key,
       row,
@@ -217,7 +216,6 @@ function sceneEntries(project: Project, stageId: string): SceneEntry[] {
         visible: asm.member.visible,
         opacity: asm.member.opacity,
         pose: override.pose,
-        color: assembled?.color ?? null,
       },
     })
   }
@@ -228,7 +226,7 @@ function applyEntry(obj: Object3D, { row, member }: SceneEntry, withPose: boolea
   if (withPose) applyPose(obj, member.pose)
   // an assembly input carries its pieces' scales inside it
   obj.scale.setScalar(row.mesh ? (row.node.scale ?? 1) : 1)
-  applyColor(obj, member.color ?? row.node.color)
+  applyColor(obj, row.node.color)
   applyOpacity(obj, member.opacity)
   obj.visible = member.visible
 }

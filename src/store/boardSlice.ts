@@ -1,11 +1,12 @@
 import { MESH_H, MESH_W, NODE_W, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '@/lib/constants'
 import { duplicateNode } from '@/lib/duplicate'
-import { edgeFor, keyRefersTo } from '@/lib/graph'
+import { edgeFor } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
 
 import { recoverFromChain } from '@/lib/chain'
 import { recoverLightsFromChain } from '@/lib/lights'
+import { reconcileProject } from '@/lib/stageInputs'
 import { clamp, uid } from '@/lib/utils'
 import { recordBoardEdit } from './boardHistorySlice'
 import { ensureStage, findProject } from './helpers'
@@ -153,7 +154,9 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         )
         if (!target) return
         const exists = project.board.edges.some((e) => e.from === dragged.id && e.to === target.id)
-        if (!exists) project.board.edges.push({ id: uid(), from: dragged.id, to: target.id })
+        if (exists) return
+        project.board.edges.push({ id: uid(), from: dragged.id, to: target.id })
+        reconcileProject(project)
       })
     },
     selectNode(nodeId) {
@@ -178,7 +181,9 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const project = findProject(state, state.pid)
         if (!project) return
         const id = duplicateNode(project, nodeId)
-        if (id) state.selId = id
+        if (!id) return
+        reconcileProject(project)
+        state.selId = id
       })
     },
     deleteNode(nodeId) {
@@ -193,25 +198,9 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         )
         if (node && node.kind !== 'mesh') delete project.stages[nodeId]
         project.steps = project.steps.filter((s) => s.stageId !== nodeId)
-        // meshes and upstream assemblies are both stage inputs — drop every
-        // downstream reference to the deleted node
-        for (const stageId in project.stages) {
-          const stage = project.stages[stageId]
-          stage.members = stage.members.filter((m) => m.nodeId !== nodeId)
-          stage.links = stage.links.filter(
-            (l) => !keyRefersTo(l.nodeA, nodeId) && !keyRefersTo(l.nodeB, nodeId),
-          )
-          for (const key of Object.keys(stage.partOverrides)) {
-            if (keyRefersTo(key, nodeId)) delete stage.partOverrides[key]
-          }
-          for (const key of Object.keys(stage.startPoses)) {
-            if (keyRefersTo(key, nodeId)) delete stage.startPoses[key]
-          }
-          stage.tracks = stage.tracks.filter((t) => !t.nodeId || !keyRefersTo(t.nodeId, nodeId))
-          for (const key of Object.keys(stage.partLooks ?? {})) {
-            if (keyRefersTo(key, nodeId)) delete stage.partLooks[key]
-          }
-        }
+        // meshes and upstream assemblies are both stage inputs — whatever
+        // any stage held about the deleted node goes with its edges
+        reconcileProject(project)
         if (state.selId === nodeId) state.selId = null
       })
     },
@@ -247,6 +236,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
           const exists = project.board.edges.some((e) => e.from === edge.from && e.to === edge.to)
           if (!exists) {
             project.board.edges.push({ id: uid(), ...edge })
+            reconcileProject(project)
             takeChainStartPoses(project, edge.from, edge.to)
           }
         }
@@ -268,7 +258,10 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     removeEdge(edgeId) {
       set((state) => {
         const project = findProject(state, state.pid)
-        if (project) project.board.edges = project.board.edges.filter((e) => e.id !== edgeId)
+        if (project) {
+          project.board.edges = project.board.edges.filter((e) => e.id !== edgeId)
+          reconcileProject(project)
+        }
         if (state.selEdge === edgeId) state.selEdge = null
       })
     },
@@ -277,7 +270,10 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       if (!selEdge) return
       set((state) => {
         const project = findProject(state, pid)
-        if (project) project.board.edges = project.board.edges.filter((e) => e.id !== selEdge)
+        if (project) {
+          project.board.edges = project.board.edges.filter((e) => e.id !== selEdge)
+          reconcileProject(project)
+        }
         state.selEdge = null
       })
     },

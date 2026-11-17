@@ -1,6 +1,7 @@
 import { triggerDownload } from '@/lib/download'
 import { extOf, filesAreKept, MESH_EXTS, putFile } from '@/lib/meshFiles'
 import { isTiny, recommendedFactor } from '@/lib/meshScale'
+import { reconcileProject } from '@/lib/stageInputs'
 import { packProject, projectFileName, unpackProject } from '@/lib/projectFile'
 import { normalizeMesh, normalizeProject } from '@/lib/migrations'
 import { recordBoardEdit } from './boardHistorySlice'
@@ -75,14 +76,7 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
           project.board.edges = project.board.edges.filter(
             (e) => !nodeIds.includes(e.from) && !nodeIds.includes(e.to),
           )
-          for (const stageId in project.stages) {
-            const stage = project.stages[stageId]
-            stage.members = stage.members.filter((m) => !nodeIds.includes(m.nodeId))
-            stage.links = stage.links.filter(
-              (l) => !nodeIds.includes(l.nodeA) && !nodeIds.includes(l.nodeB),
-            )
-            stage.tracks = stage.tracks.filter((t) => !t.nodeId || !nodeIds.includes(t.nodeId))
-          }
+          reconcileProject(project)
           state.confirm = null
         })
       }

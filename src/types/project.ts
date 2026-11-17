@@ -17,7 +17,6 @@ export interface MeshRecord {
   id: string
   name: string
   ext: string
-  origin: 'original'
   /** The file's contents: their key in the file store (lib/meshFiles.ts). */
   hash: string | null
   /** The file's size in bytes (0: not known). */
@@ -25,7 +24,6 @@ export interface MeshRecord {
   /** Saves from before files had a store of their own carry the file here,
    *  as a data URL, until it is moved there (store/startup.ts). */
   data: string | null
-  color: string | null
   /** Bounding-box size in the file's native units, measured the first time
    *  the file is dropped on the board (null until then). */
   size: Vec3 | null
@@ -60,10 +58,11 @@ export interface StageMember {
   visible: boolean
   opacity: number
   pose: Pose
-  color: string | null
 }
 
-export type LinkState = 'pending' | 'solved' | 'gap'
+/** 'solved': the two points touch. 'gap': they could not be brought
+ *  together (the link keeps how far apart they are). */
+export type LinkState = 'solved' | 'gap'
 export type Axis = 'x' | 'y' | 'z'
 
 export interface KeypointLink {
@@ -123,7 +122,6 @@ export interface StageCamera {
    *  animation imports it. */
   name: string
   pose: Pose
-  tracked: boolean
 }
 
 export type LightKind = 'ambient' | 'directional' | 'point' | 'spot'
@@ -174,10 +172,6 @@ export interface StageFloor {
   shadow: number
 }
 
-export interface StageUnion {
-  at: number
-}
-
 /** The shape of the animation camera's frame — what "look through" shows
  *  and video export records. */
 export type FrameFormat = '16:9' | '9:16' | '1:1' | '4:3'
@@ -185,11 +179,13 @@ export type FrameFormat = '16:9' | '9:16' | '1:1' | '4:3'
 export interface Stage {
   kind: StageKind
   frame: FrameFormat
+  /** A pose and a look for each input. Which inputs there are is said by
+   *  the board's edges alone; this list is kept in line with them
+   *  (lib/stageInputs.ts). */
   members: StageMember[]
   links: KeypointLink[]
   camera: StageCamera | null
   tracks: Track[]
-  union: StageUnion | null
   /** Visibility / opacity of pieces inside assembly inputs, by part key
    *  (an animation can hide or fade a single piece of an assembly). */
   partLooks: Record<string, PartLook>

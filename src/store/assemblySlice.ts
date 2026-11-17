@@ -178,18 +178,5 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
         if (pose) pose.rot[axis] = num(value, 0)
       })
     },
-
-    doUnion() {
-      set((state) => {
-        const project = findProject(state, state.pid)
-        if (project && state.aid) project.stages[state.aid].union = { at: Date.now() }
-      })
-    },
-    undoUnion() {
-      set((state) => {
-        const project = findProject(state, state.pid)
-        if (project && state.aid) project.stages[state.aid].union = null
-      })
-    },
   }
 }

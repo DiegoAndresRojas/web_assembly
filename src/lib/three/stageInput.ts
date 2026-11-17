@@ -45,7 +45,7 @@ async function buildStageOutput(
         }
       }
       if (row.mesh) obj.scale.setScalar(row.node.scale ?? 1)
-      applyColor(obj, member.color ?? row.node.color)
+      applyColor(obj, row.node.color)
       obj.userData.msNodeId = row.node.id
       if (member.opacity !== undefined) applyOpacity(obj, member.opacity)
       return obj
