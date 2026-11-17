@@ -8,7 +8,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
-import { applyPose, readPose } from './buildMesh'
+import { applyPose, readPose, releaseObject } from './buildMesh'
 import { ANIM_ASPECT, AnimCameraRig } from './animCameraRig'
 import { buildEnvironment } from './environments'
 import { LightRig } from './lightRig'
@@ -514,6 +514,7 @@ export class WorldSession {
     if (this.selectedId === id) this.setSelected(null)
     this.objects.delete(id)
     this.scene?.remove(obj)
+    releaseObject(obj)
     this.hoverDirty = true
   }
 
@@ -1051,6 +1052,9 @@ export class WorldSession {
     this.disposed = true
     if (this.raf !== null) cancelAnimationFrame(this.raf)
     this.resizeObserver?.disconnect()
+    if (this.resize) window.removeEventListener('resize', this.resize)
+    for (const obj of this.objects.values()) releaseObject(obj)
+    this.objects.clear()
     this.controls?.dispose()
     this.gizmo?.dispose()
     this.animRig?.dispose()
@@ -1062,6 +1066,9 @@ export class WorldSession {
     }
     if (this.renderer) {
       this.renderer.dispose()
+      // browsers only allow a handful of WebGL contexts at once: give this
+      // one back now rather than whenever the canvas is collected
+      this.renderer.forceContextLoss()
       const el = this.renderer.domElement
       el.parentNode?.removeChild(el)
     }

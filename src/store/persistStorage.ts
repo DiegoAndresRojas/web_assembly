@@ -10,14 +10,23 @@
 //     WRITE_INTERVAL_MS, flushed early when the tab is hidden or closed.
 //
 // localStorage can also throw (quota exceeded, private browsing) — logged
-// rather than lost silently.
+// and handed to `onWriteError`, so the person is told rather than losing
+// work silently.
 import type { PersistStorage, StorageValue } from 'zustand/middleware'
 
 const WRITE_INTERVAL_MS = 400
 
-export function createProjectStorage<
-  S extends { projects: unknown; stageViews?: unknown },
->(): PersistStorage<S> {
+let readFailed = false
+
+/** Whether the saved projects could be read when the app started (false:
+ *  what is in memory may be less than what is saved). */
+export function savedProjectsWereRead(): boolean {
+  return !readFailed
+}
+
+export function createProjectStorage<S extends { projects: unknown; stageViews?: unknown }>(
+  onWriteError?: (error: unknown) => void,
+): PersistStorage<S> {
   let lastProjects: unknown = undefined
   let lastViews: unknown = undefined
   let pending: { name: string; value: StorageValue<S> } | null = null
@@ -36,6 +45,7 @@ export function createProjectStorage<
         '[mesh-studio] could not save projects — storage may be full or unavailable (private browsing?):',
         e,
       )
+      onWriteError?.(e)
     }
   }
 
@@ -53,6 +63,7 @@ export function createProjectStorage<
         return raw ? (JSON.parse(raw) as StorageValue<S>) : null
       } catch (e) {
         console.error('[mesh-studio] could not read saved projects:', e)
+        readFailed = true
         return null
       }
     },

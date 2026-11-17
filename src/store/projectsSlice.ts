@@ -1,4 +1,7 @@
+import { triggerDownload } from '@/lib/download'
+import { extOf, filesAreKept, MESH_EXTS, putFile } from '@/lib/meshFiles'
 import { isTiny, recommendedFactor } from '@/lib/meshScale'
+import { packProject, projectFileName, unpackProject } from '@/lib/projectFile'
 import { normalizeMesh, normalizeProject } from '@/lib/migrations'
 import { findProject } from './helpers'
 import type { Get, ProjectsActions, ProjectsState, Set } from './types'
@@ -13,7 +16,10 @@ export const initialProjectsState: ProjectsState = {
   confirm: null,
   colorEdit: null,
   scaleEdit: null,
+  working: null,
 }
+
+const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
   return {
@@ -87,15 +93,100 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
       })
     },
 
-    addMeshes(pid, files) {
-      set((state) => {
-        const project = findProject(state, pid)
-        if (!project) return
-        for (const f of files) {
-          const mesh = normalizeMesh({ name: f.name, ext: f.ext, data: f.data, origin: 'original' })
-          if (mesh) project.meshes.push(mesh)
+    async importMeshFiles(pid, files) {
+      const { notify } = get()
+      const setWorking = (working: string | null) =>
+        set((state) => {
+          state.working = working
+        })
+      let stored = 0
+      for (const file of files) {
+        const ext = extOf(file.name)
+        if (!MESH_EXTS.includes(ext)) {
+          notify(`${file.name} is not a mesh this app can load (GLB, GLTF, OBJ or STL).`)
+          continue
         }
+        setWorking(`Storing ${file.name}…`)
+        try {
+          const data = await file.arrayBuffer()
+          const hash = await putFile(data)
+          const mesh = normalizeMesh({ name: file.name, ext, hash, bytes: data.byteLength })
+          set((state) => {
+            const project = findProject(state, pid)
+            if (project && mesh) project.meshes.push(mesh)
+          })
+          stored++
+        } catch (e) {
+          console.error('[mesh-studio] could not store', file.name, e)
+          notify(
+            `${file.name} could not be stored — the browser may be out of room. (${reason(e)})`,
+          )
+        }
+      }
+      setWorking(null)
+      if (stored && !(await filesAreKept())) {
+        notify(
+          'This browser is not keeping files (private browsing?): the meshes will be gone when the page is reloaded.',
+        )
+      }
+    },
+
+    async exportProject(pid) {
+      const project = get().projects.find((p) => p.id === pid)
+      if (!project || get().working) return
+      set((state) => {
+        state.working = `Exporting ${project.name}…`
       })
+      try {
+        const { blob, missing } = await packProject(project)
+        triggerDownload(blob, projectFileName(project))
+        if (missing.length) {
+          get().notify(
+            `Exported without the files of: ${missing.join(', ')} (not in this browser).`,
+          )
+        }
+      } catch (e) {
+        console.error('[mesh-studio] could not export the project:', e)
+        get().notify(`${project.name} could not be exported: ${reason(e)}.`)
+      } finally {
+        set((state) => {
+          state.working = null
+        })
+      }
+    },
+
+    async importProject(file) {
+      if (get().working) return
+      set((state) => {
+        state.working = 'Importing project…'
+      })
+      try {
+        const { project, missing } = await unpackProject(file)
+        const names = new Set(get().projects.map((p) => p.name))
+        if (names.has(project.name)) {
+          let n = 2
+          while (names.has(`${project.name} (${n})`)) n++
+          project.name = `${project.name} (${n})`
+        }
+        set((state) => {
+          state.projects.push(project)
+        })
+        if (missing.length) {
+          get().notify(`${project.name} came without the files of: ${missing.join(', ')}.`)
+        } else get().notify(`${project.name} imported.`, 'info')
+        if (!(await filesAreKept())) {
+          get().notify(
+            'This browser is not keeping files (private browsing?): the meshes will be gone when the page is reloaded.',
+          )
+        }
+      } catch (e) {
+        console.error('[mesh-studio] could not import the project:', e)
+        get().notify(`Could not import: ${reason(e)}.`)
+      } finally {
+        set((state) => {
+          state.working = null
+        })
+      }
     },
 
     openColorEditor(nodeId) {
@@ -189,6 +280,7 @@ async function ensureMeshSize(get: Get, set: Set, nodeId: string): Promise<Vec3 
     return size
   } catch (e) {
     console.error('[mesh-studio] could not measure mesh:', e)
+    get().notify(`Could not read ${mesh.name}: ${reason(e)}.`)
     return null
   }
 }

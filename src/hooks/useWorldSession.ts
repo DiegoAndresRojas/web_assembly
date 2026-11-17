@@ -17,6 +17,7 @@ import { evalStageIn, stagePieces } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import {
   assemblyParts,
+  inputLabel,
   lockedKey,
   membersOf,
   parentKey,
@@ -26,7 +27,7 @@ import {
 import { lightIdOf, lightsAt, lightTrack } from '@/lib/lights'
 import { stageDuration } from '@/lib/timeline'
 import { aspectOf } from '@/lib/videoFormat'
-import { applyColor, applyOpacity, applyPose } from '@/lib/three/buildMesh'
+import { applyColor, applyOpacity, applyPose, keepParsedMeshes } from '@/lib/three/buildMesh'
 import { buildInput } from '@/lib/three/stageInput'
 import { WorldSession, type PickHit } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
@@ -236,6 +237,10 @@ function companionsOf(id: string): string[] {
  *  file is still parsing don't start (and add) duplicate copies of it. */
 const building = new WeakMap<WorldSession, Set<string>>()
 
+/** Keys whose object could not be built: said once, and not tried again
+ *  for as long as the stage stays open. */
+const failed = new WeakMap<WorldSession, Set<string>>()
+
 /** Brings the session's objects in line with the store: drops what's gone,
  *  re-poses what exists, builds what's missing. A build resolving later
  *  re-runs this against the store as it is *then*, so it never lands with
@@ -260,7 +265,7 @@ function syncSession(session: WorldSession, stageId: string): void {
       applyEntry(existing, entry, true)
       continue
     }
-    if (inFlight.has(entry.key)) continue
+    if (inFlight.has(entry.key) || failed.get(session)?.has(entry.key)) continue
     inFlight.add(entry.key)
     const done = inFlight
     buildInput(project, entry.row)
@@ -272,7 +277,17 @@ function syncSession(session: WorldSession, stageId: string): void {
         syncSession(session, stageId)
         session.frameAllIfUntouched()
       })
-      .catch(() => done.delete(entry.key))
+      .catch((e: unknown) => {
+        done.delete(entry.key)
+        if (session.isDisposed) return
+        failed.set(session, (failed.get(session) ?? new Set()).add(entry.key))
+        console.error('[mesh-studio] could not load', entry.key, e)
+        useStore
+          .getState()
+          .notify(
+            `Could not load ${inputLabel(project, entry.key)}: ${e instanceof Error ? e.message : String(e)}`,
+          )
+      })
   }
   // pieces inside assembly inputs: visibility / opacity per piece
   applyPartLooks(session, project, stageId)
@@ -307,6 +322,7 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       onObjectMoved,
       companionsOf,
     })
+    keepParsedMeshes(selectCurrentProject(useStore.getState())?.meshes ?? [])
     // look from where this stage was left last time
     const left = stageId ? useStore.getState().stageViews[stageId]?.orbit : null
     if (left) created.holdView(left.pos, left.target)

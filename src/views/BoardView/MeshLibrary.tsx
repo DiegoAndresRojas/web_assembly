@@ -1,21 +1,13 @@
 import { useMemo, useRef } from 'react'
 
 import { CloseIcon, DownloadIcon, PlusIcon } from '@/components/icons'
-import { downloadDataUrl } from '@/lib/download'
+import { triggerDownload } from '@/lib/download'
+import { formatBytes, meshBytes, MESH_EXTS } from '@/lib/meshFiles'
 import { useStore } from '@/store'
 import type { MeshRecord, Project } from '@/types/project'
 
 export interface MeshLibraryProps {
   project: Project
-}
-
-function readAsDataUrl(file: File): Promise<string | null> {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
-    reader.onerror = () => resolve(null)
-    reader.readAsDataURL(file)
-  })
 }
 
 /** The name to save a library file under — its own, with its extension. */
@@ -27,7 +19,9 @@ function fileName(mesh: MeshRecord): string {
 export function MeshLibrary({ project }: MeshLibraryProps) {
   const filterExt = useStore((s) => s.meshFilterExt)
   const setMeshFilter = useStore((s) => s.setMeshFilter)
-  const addMeshes = useStore((s) => s.addMeshes)
+  const importMeshFiles = useStore((s) => s.importMeshFiles)
+  const notify = useStore((s) => s.notify)
+  const working = useStore((s) => s.working)
   const askDeleteMesh = useStore((s) => s.askDeleteMesh)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -37,17 +31,18 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
   )
   const meshes = filterExt ? project.meshes.filter((m) => m.ext === filterExt) : project.meshes
 
-  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    const results = await Promise.all(
-      files.map(async (f) => ({
-        name: f.name,
-        ext: (f.name.split('.').pop() ?? '').toLowerCase(),
-        data: f.size < 8e6 ? await readAsDataUrl(f) : null,
-      })),
-    )
-    if (results.length) addMeshes(project.id, results)
+    if (files.length) void importMeshFiles(project.id, files)
+  }
+
+  const onDownload = (mesh: MeshRecord) => {
+    meshBytes(mesh)
+      .then((data) => triggerDownload(new Blob([data]), fileName(mesh)))
+      .catch((e: unknown) =>
+        notify(`Could not download ${mesh.name}: ${e instanceof Error ? e.message : String(e)}.`),
+      )
   }
 
   const onDragStartMesh = (e: React.DragEvent, mesh: MeshRecord) => {
@@ -83,12 +78,25 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
             ref={inputRef}
             type="file"
             multiple
-            accept=".glb,.gltf,.obj,.stl"
+            accept={MESH_EXTS.map((ext) => '.' + ext).join(',')}
             style={{ display: 'none' }}
             onChange={onUpload}
           />
         </label>
-        <div style={{ flex: 1 }} />
+        <div
+          className="text-muted"
+          role="status"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 10,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {working}
+        </div>
         {exts.map((ext) => (
           <div
             key={ext}
@@ -129,7 +137,7 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
             key={m.id}
             draggable
             onDragStart={(e) => onDragStartMesh(e, m)}
-            title={m.name}
+            title={m.bytes ? `${m.name} — ${formatBytes(m.bytes)}` : m.name}
             style={{
               position: 'relative',
               aspectRatio: '1',
@@ -153,7 +161,7 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
             >
               {m.ext.toUpperCase()}
             </span>
-            {m.data && (
+            {(m.hash || m.data) && (
               <button
                 type="button"
                 title={`Download ${fileName(m)}`}
@@ -161,7 +169,7 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
                 draggable={false}
                 onClick={(e) => {
                   e.stopPropagation()
-                  void downloadDataUrl(m.data!, fileName(m))
+                  onDownload(m)
                 }}
                 style={{
                   position: 'absolute',

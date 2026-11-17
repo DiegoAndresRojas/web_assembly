@@ -12,22 +12,11 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
 import { STLLoader } from 'three/addons/loaders/STLLoader.js'
 
 import { DEFAULT_MESH_COLOR } from '@/lib/constants'
+import { meshBytes } from '@/lib/meshFiles'
 import { clamp, num } from '@/lib/utils'
 import type { MeshRecord, Pose, Vec3 } from '@/types/project'
 
 export type DownloadFormat = 'glb' | 'obj' | 'stl'
-
-function dataURLToArrayBuffer(dataURL: string): ArrayBuffer {
-  const base64 = dataURL.slice(dataURL.indexOf(',') + 1)
-  const bin = atob(base64)
-  const buf = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
-  return buf.buffer
-}
-
-function dataURLToText(dataURL: string): string {
-  return new TextDecoder().decode(dataURLToArrayBuffer(dataURL))
-}
 
 function defaultMaterial(colorHex?: string | null): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
@@ -50,60 +39,83 @@ function centerMesh(object3d: THREE.Object3D): THREE.Object3D {
   return object3d
 }
 
-/** Builds a self-contained three.js Object3D from an uploaded mesh
- *  record, at the scale it was authored in. */
-export function buildMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
+/** Reads a mesh file into a three.js object, at the scale it was
+ *  authored in. */
+async function parseMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
   const ext = meshRecord.ext.toLowerCase()
   const wrap = new THREE.Group()
   wrap.name = meshRecord.name || meshRecord.id
+  if (ext !== 'glb' && ext !== 'gltf' && ext !== 'obj' && ext !== 'stl') {
+    throw new Error('unsupported mesh format: ' + (ext || 'none'))
+  }
+  const bytes = await meshBytes(meshRecord)
 
   if (ext === 'glb' || ext === 'gltf') {
-    return new Promise((resolve, reject) => {
-      const loader = new GLTFLoader()
-      if (!meshRecord.data) {
-        reject(new Error('mesh has no data'))
-        return
-      }
-      loader.parse(
-        dataURLToArrayBuffer(meshRecord.data),
-        '',
-        (gltf) => {
-          wrap.add(gltf.scene)
-          resolve(centerMesh(wrap))
-        },
-        reject,
-      )
+    const gltf = await new Promise<{ scene: THREE.Object3D }>((resolve, reject) => {
+      new GLTFLoader().parse(bytes, '', resolve, reject)
     })
-  }
-  if (ext === 'obj') {
-    if (!meshRecord.data) return Promise.reject(new Error('mesh has no data'))
-    const loader = new OBJLoader()
-    const obj = loader.parse(dataURLToText(meshRecord.data))
+    wrap.add(gltf.scene)
+  } else if (ext === 'obj') {
+    const obj = new OBJLoader().parse(new TextDecoder().decode(bytes))
     obj.traverse((child) => {
       if (child instanceof THREE.Mesh && !child.material) child.material = defaultMaterial()
     })
     wrap.add(obj)
-    return Promise.resolve(centerMesh(wrap))
-  }
-  if (ext === 'stl') {
-    if (!meshRecord.data) return Promise.reject(new Error('mesh has no data'))
-    const loader = new STLLoader()
-    const geometry = loader.parse(dataURLToArrayBuffer(meshRecord.data))
+  } else {
+    const geometry = new STLLoader().parse(bytes)
     geometry.computeVertexNormals()
-    const mesh = new THREE.Mesh(geometry, defaultMaterial(meshRecord.color))
-    wrap.add(mesh)
-    return Promise.resolve(centerMesh(wrap))
+    wrap.add(new THREE.Mesh(geometry, defaultMaterial(meshRecord.color)))
   }
-  return Promise.reject(new Error('unsupported mesh format: ' + ext))
+  return centerMesh(wrap)
+}
+
+/** Each file as it was parsed, by what it holds: opening a stage, or a
+ *  file wired into several of them, reads it once. */
+const parsed = new Map<string, Promise<THREE.Object3D>>()
+
+function cacheKey(meshRecord: MeshRecord): string {
+  return (meshRecord.hash ?? 'mesh:' + meshRecord.id) + '.' + meshRecord.ext.toLowerCase()
+}
+
+/** Builds a three.js Object3D of an uploaded mesh, at the scale it was
+ *  authored in. Every call gets an object of its own; the geometry (and
+ *  the materials, until one is changed — see ownMaterial) is shared with
+ *  the others of the same file, so it must be treated as read-only. */
+export function buildMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
+  const key = cacheKey(meshRecord)
+  let reading = parsed.get(key)
+  if (!reading) {
+    reading = parseMesh(meshRecord)
+    parsed.set(key, reading)
+    // a file that failed to load is read again the next time it is asked for
+    reading.catch(() => parsed.delete(key))
+  }
+  return reading.then((object) => object.clone(true))
+}
+
+/** Forgets the parsed files other than those of `meshes` — called with
+ *  the open project's library, so memory holds one project's parts. */
+export function keepParsedMeshes(meshes: MeshRecord[]): void {
+  const keep = new Set(meshes.map(cacheKey))
+  for (const key of Array.from(parsed.keys())) if (!keep.has(key)) parsed.delete(key)
+}
+
+/** Frees what the renderer holds for an object built here (buffers on the
+ *  graphics card, compiled shaders). The parsed file stays in memory: a
+ *  new renderer uploads it again without reading the file. */
+export function releaseObject(object3d: THREE.Object3D): void {
+  object3d.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    child.geometry.dispose()
+    const materials = Array.isArray(child.material) ? child.material : [child.material]
+    for (const material of materials as THREE.Material[]) material.dispose()
+  })
 }
 
 /** Bounding-box size of a mesh file in its native units. */
 export async function measureMesh(meshRecord: MeshRecord): Promise<Vec3> {
   const obj = await buildMesh(meshRecord)
   const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3())
-  obj.traverse((child) => {
-    if (child instanceof THREE.Mesh) child.geometry.dispose()
-  })
   return { x: size.x, y: size.y, z: size.z }
 }
 

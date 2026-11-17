@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { Notices } from '@/components/Notices'
 import { useStore } from '@/store'
 import { BoardView } from '@/views/BoardView/BoardView'
 import { ProjectsView } from '@/views/ProjectsView/ProjectsView'
@@ -57,6 +58,7 @@ export function App() {
           </Suspense>
         </ErrorBoundary>
       )}
+      <Notices />
     </div>
   )
 }

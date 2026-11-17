@@ -18,7 +18,13 @@ export interface MeshRecord {
   name: string
   ext: string
   origin: 'original'
-  data: string | null // data URL
+  /** The file's contents: their key in the file store (lib/meshFiles.ts). */
+  hash: string | null
+  /** The file's size in bytes (0: not known). */
+  bytes: number
+  /** Saves from before files had a store of their own carry the file here,
+   *  as a data URL, until it is moved there (store/startup.ts). */
+  data: string | null
   color: string | null
   /** Bounding-box size in the file's native units, measured the first time
    *  the file is dropped on the board (null until then). */

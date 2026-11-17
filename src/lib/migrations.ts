@@ -44,9 +44,12 @@ import type {
 //     only take inputs — edges coming out of one are dropped.
 // 14: animations have their own lighting (lights, environment, floor);
 //     light tracks, and actions that change a light's intensity.
+// 15: mesh files live in a store of their own (IndexedDB), keyed by the
+//     hash of their contents; a mesh saved with its file inside keeps it
+//     until it is moved there.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 14
+export const CURRENT_VERSION = 15
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -67,6 +70,8 @@ export function normalizeMesh(raw: unknown): MeshRecord | null {
     name: typeof m.name === 'string' && m.name ? m.name : 'mesh',
     ext: typeof m.ext === 'string' ? m.ext.toLowerCase() : '',
     origin: 'original',
+    hash: typeof m.hash === 'string' && m.hash ? m.hash : null,
+    bytes: Math.max(0, num(m.bytes, 0)),
     data: typeof m.data === 'string' ? m.data : null,
     color: typeof m.color === 'string' ? m.color : null,
     size: m.size && typeof m.size === 'object' ? asVec3(m.size) : null,

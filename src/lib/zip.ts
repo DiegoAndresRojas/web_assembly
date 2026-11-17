@@ -1,6 +1,7 @@
-// Minimal store-only (uncompressed) ZIP writer — no CDN/npm zip dependency
-// is warranted for zipping a handful of exported PNG frames. Typed port of
-// the writer in only_js/src/features/exporting.js.
+// Minimal ZIP writer (store-only, uncompressed) and reader — no npm zip
+// dependency is warranted for zipping exported PNG frames and project
+// files. The reader also takes deflated entries, so a project file that
+// was unzipped and zipped again by hand still opens.
 
 export interface ZipEntry {
   name: string
@@ -48,6 +49,7 @@ export async function buildZip(files: ZipEntry[]): Promise<Blob> {
 
   for (const f of files) {
     const buf = new Uint8Array(await f.blob.arrayBuffer())
+    if (offset + buf.length > 0xfffffff0) throw new Error('too large for one file (over 4 GB)')
     const crc = crc32(buf)
     const nameBytes = strBytes(f.name)
     const local = [
@@ -111,4 +113,75 @@ export async function buildZip(files: ZipEntry[]): Promise<Blob> {
   parts.push(new Uint8Array(end))
 
   return new Blob(parts, { type: 'application/zip' })
+}
+
+// ---------- reading ----------
+
+export interface ZipFile {
+  name: string
+  /** The entry's contents, uncompressed. */
+  read: () => Promise<ArrayBuffer>
+}
+
+const END_SIG = 0x06054b50
+const CENTRAL_SIG = 0x02014b50
+/** The end record, plus the longest comment that can follow it. */
+const END_MAX = 22 + 0xffff
+
+async function view(blob: Blob, start: number, end: number): Promise<DataView> {
+  return new DataView(await blob.slice(start, end).arrayBuffer())
+}
+
+/** Lists the entries of a ZIP file. Only what is asked for is read, so a
+ *  large archive is never held in memory whole. Rejects if `blob` is not a
+ *  ZIP file. */
+export async function readZip(blob: Blob): Promise<ZipFile[]> {
+  const tailStart = Math.max(0, blob.size - END_MAX)
+  const tail = await view(blob, tailStart, blob.size)
+  let end = -1
+  for (let i = tail.byteLength - 22; i >= 0; i--) {
+    if (tail.getUint32(i, true) === END_SIG) {
+      end = i
+      break
+    }
+  }
+  if (end < 0) throw new Error('not a zip file')
+  const count = tail.getUint16(end + 10, true)
+  const centralSize = tail.getUint32(end + 12, true)
+  const centralStart = tail.getUint32(end + 16, true)
+  if (centralStart === 0xffffffff || count === 0xffff) {
+    throw new Error('zip file too large (ZIP64 is not supported)')
+  }
+  const central = await view(blob, centralStart, centralStart + centralSize)
+  const decoder = new TextDecoder()
+  const files: ZipFile[] = []
+  let at = 0
+  for (let n = 0; n < count; n++) {
+    if (at + 46 > central.byteLength || central.getUint32(at, true) !== CENTRAL_SIG) {
+      throw new Error('damaged zip file')
+    }
+    const method = central.getUint16(at + 10, true)
+    const packedSize = central.getUint32(at + 20, true)
+    const nameLen = central.getUint16(at + 28, true)
+    const extraLen = central.getUint16(at + 30, true)
+    const commentLen = central.getUint16(at + 32, true)
+    const localStart = central.getUint32(at + 42, true)
+    const name = decoder.decode(
+      new Uint8Array(central.buffer, central.byteOffset + at + 46, nameLen),
+    )
+    at += 46 + nameLen + extraLen + commentLen
+    files.push({
+      name,
+      async read() {
+        const local = await view(blob, localStart, localStart + 30)
+        const dataStart = localStart + 30 + local.getUint16(26, true) + local.getUint16(28, true)
+        const packed = blob.slice(dataStart, dataStart + packedSize)
+        if (method === 0) return packed.arrayBuffer()
+        if (method !== 8) throw new Error('unsupported zip compression')
+        const stream = packed.stream().pipeThrough(new DecompressionStream('deflate-raw'))
+        return new Response(stream).arrayBuffer()
+      },
+    })
+  }
+  return files
 }

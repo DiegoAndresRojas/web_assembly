@@ -1,4 +1,7 @@
+import { useRef } from 'react'
+
 import { Button } from '@/components/Button'
+import { PROJECT_FILE_EXT } from '@/lib/projectFile'
 import { useStore } from '@/store'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
 import { ProjectCard } from './ProjectCard'
@@ -8,6 +11,10 @@ export function ProjectsView() {
   const createProject = useStore((s) => s.createProject)
   const openProject = useStore((s) => s.openProject)
   const askDeleteProject = useStore((s) => s.askDeleteProject)
+  const exportProject = useStore((s) => s.exportProject)
+  const importProject = useStore((s) => s.importProject)
+  const working = useStore((s) => s.working)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const handleNew = () => {
     const project = createProject()
@@ -25,9 +32,33 @@ export function ProjectsView() {
         }}
       >
         <div className="nav-brand">Mesh Studio</div>
-        <Button variant="primary" onClick={handleNew}>
-          New project
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <span className="text-muted" role="status" style={{ fontSize: 12 }}>
+            {working}
+          </span>
+          <input
+            ref={fileInput}
+            type="file"
+            accept={`.${PROJECT_FILE_EXT},.zip`}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void importProject(file)
+            }}
+          />
+          <Button
+            variant="secondary"
+            title="Open a project file exported from Mesh Studio"
+            disabled={!!working}
+            onClick={() => fileInput.current?.click()}
+          >
+            Import project
+          </Button>
+          <Button variant="primary" onClick={handleNew}>
+            New project
+          </Button>
+        </div>
       </div>
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 var(--space-6) var(--space-8)' }}>
         <p className="text-muted" style={{ fontSize: 13, maxWidth: '52ch' }}>
@@ -48,6 +79,7 @@ export function ProjectsView() {
                 key={p.id}
                 project={p}
                 onOpen={() => openProject(p.id)}
+                onExport={() => void exportProject(p.id)}
                 onDelete={() => askDeleteProject(p.id, p.name)}
               />
             ))}

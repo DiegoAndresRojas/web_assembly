@@ -10,6 +10,7 @@ import { createBoardSlice, initialBoardState } from './boardSlice'
 import { createExportSlice, initialExportState } from './exportSlice'
 import { createHistorySlice, initialHistoryState } from './historySlice'
 import { createLightsSlice } from './lightsSlice'
+import { createNoticesSlice, initialNoticesState } from './noticesSlice'
 import { createNavigationSlice, initialNavigationState } from './navigationSlice'
 import { createProjectStorage } from './persistStorage'
 import { createProjectsSlice, initialProjectsState } from './projectsSlice'
@@ -27,6 +28,7 @@ export const useStore = create<AppState>()(
       ...initialAssemblyState,
       ...initialAnimationState,
       ...initialExportState,
+      ...initialNoticesState,
 
       ...createProjectsSlice(set, get),
       ...createNavigationSlice(set, get),
@@ -37,11 +39,18 @@ export const useStore = create<AppState>()(
       ...createAnimationSlice(set, get),
       ...createLightsSlice(set, get),
       ...createExportSlice(set),
+      ...createNoticesSlice(set),
     })),
     {
       name: STORAGE_KEY,
       version: CURRENT_VERSION,
-      storage: createProjectStorage(),
+      storage: createProjectStorage(() =>
+        useStore
+          .getState()
+          .notify(
+            'Your last changes could not be saved: the browser storage is full or unavailable. Export the project to keep a copy.',
+          ),
+      ),
       partialize: (state) => ({ projects: state.projects, stageViews: state.stageViews }),
       migrate: (persisted) => runMigrations(persisted),
       merge: (persisted, current) => ({ ...current, ...(persisted as Partial<AppState>) }),

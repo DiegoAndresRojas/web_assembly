@@ -53,6 +53,9 @@ export interface ProjectsState {
   confirm: DeleteConfirm | null
   colorEdit: ColorEdit | null
   scaleEdit: ScaleEdit | null
+  /** What is being done with files right now ("Importing bracket…"), for
+   *  the person to see; null when nothing is. */
+  working: string | null
 }
 
 export interface ProjectsActions {
@@ -61,7 +64,13 @@ export interface ProjectsActions {
   askDeleteProject: (id: string, name: string) => void
   cancelDeleteConfirm: () => void
   confirmDelete: () => void
-  addMeshes: (pid: string, files: { name: string; ext: string; data: string | null }[]) => void
+  /** Stores the files and adds them to the project's library; the ones
+   *  that are not meshes, or cannot be stored, are told about on screen. */
+  importMeshFiles: (pid: string, files: File[]) => Promise<void>
+  /** Downloads the project as one file, mesh files included. */
+  exportProject: (pid: string) => Promise<void>
+  /** Adds the project held in a project file. */
+  importProject: (file: Blob) => Promise<void>
   askDeleteMesh: (id: string, name: string) => void
   openColorEditor: (nodeId: string) => void
   cancelColorEditor: () => void
@@ -396,6 +405,22 @@ export interface ExportActions {
   setExportError: (err: string | null) => void
 }
 
+export interface Notice {
+  id: string
+  kind: 'error' | 'info'
+  text: string
+}
+
+export interface NoticesState {
+  notices: Notice[]
+}
+
+export interface NoticesActions {
+  /** Tells the person something on screen ('error' unless said otherwise). */
+  notify: (text: string, kind?: Notice['kind']) => void
+  dismissNotice: (id: string) => void
+}
+
 export type Set = (fn: (state: Draft<AppState>) => void) => void
 export type Get = () => AppState
 
@@ -415,4 +440,6 @@ export type AppState = ProjectsState &
   AnimationActions &
   LightsActions &
   ExportState &
-  ExportActions
+  ExportActions &
+  NoticesState &
+  NoticesActions
