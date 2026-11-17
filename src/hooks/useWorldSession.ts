@@ -41,6 +41,13 @@ let currentSession: WorldSession | null = null
  *  next (the animations of a presentation share one world). */
 let viewerOrbit: OrbitView | null = null
 
+/** How fast the viewer plays: 1 is the speed the author made it at. */
+let viewerSpeed = 1
+
+export function setViewerSpeed(speed: number): void {
+  viewerSpeed = speed > 0 ? speed : 1
+}
+
 /** Starts the viewer's next animation from the default view. */
 export function resetViewerOrbit(): void {
   viewerOrbit = null
@@ -200,7 +207,7 @@ function animateTick(session: WorldSession, dt: number): void {
   const stage = selectCurrentProject(state)?.stages[state.aid ?? '']
   if (!stage) return
   const dur = stageDuration(stage)
-  let t = (animClock ?? state.playT) + dt
+  let t = (animClock ?? state.playT) + dt * (state.view === 'viewer' ? viewerSpeed : 1)
   let playing = true
   if (t >= dur) {
     if (state.loop && dur > 0) t %= dur

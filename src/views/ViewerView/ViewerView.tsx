@@ -16,11 +16,15 @@ import {
   lookAroundFromCamera,
   resetViewerOrbit,
   restoreViewerScene,
+  setViewerSpeed,
   useWorldSession,
 } from '@/hooks/useWorldSession'
 import { playlistOf, type Scene } from '@/lib/frames'
 import { useStore } from '@/store'
 import { selectCurrentProject } from '@/store/selectors'
+
+/** The speeds it can be played at (1: as the author made it). */
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4]
 
 /** 0:07.4 — minutes, seconds and tenths. */
 function clock(seconds: number): string {
@@ -121,6 +125,11 @@ export function ViewerView({ stageId }: { stageId: string }) {
   const session = useWorldSession(container, stageId)
   // one animation after another by itself, or each one waiting to be asked
   const [auto, setAuto] = useState(true)
+  const [speed, setSpeed] = useState(1)
+  useEffect(() => {
+    setViewerSpeed(speed)
+    return () => setViewerSpeed(1)
+  }, [speed])
 
   const { frame, scenes } = project ? playlistOf(project, frameId) : { frame: null, scenes: [] }
   const index = scenes.findIndex((s) => s.stageId === stageId)
@@ -270,6 +279,22 @@ export function ViewerView({ stageId }: { stageId: string }) {
           >
             <RepeatIcon size={15} /> Auto-advance
           </button>
+
+          <select
+            className="viewer-btn viewer-speed"
+            title="Playback speed"
+            aria-label="Playback speed"
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            // (the arrow keys change animation here, not the speed)
+            onKeyDown={(e) => e.preventDefault()}
+          >
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>
+                {s}x
+              </option>
+            ))}
+          </select>
 
           <span style={{ flex: 1 }} />
 

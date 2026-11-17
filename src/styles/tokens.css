@@ -1067,6 +1067,16 @@ a:hover {
   cursor: default;
 }
 
+.viewer-speed {
+  background: rgba(255, 255, 255, 0.08);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-speed option {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
 .viewer-btn--main {
   width: 42px;
   height: 42px;
