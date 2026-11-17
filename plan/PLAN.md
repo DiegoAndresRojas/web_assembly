@@ -13,7 +13,7 @@ Una herramienta para crear y reproducir instrucciones de ensamblaje en 3D, con d
 
 | Decisión | Detalle |
 |---|---|
-| Un paso = etapa de ensamblaje + animación opcional | La animación deja de ser un nodo separado del tablero. Por defecto se genera sola (las piezas nuevas viajan hasta su sitio) y el autor puede refinarla. |
+| Ensamblajes y animaciones son nodos separados | Se decidió así al trabajar (cambia el plan inicial, que los fusionaba): un ensamblaje dice dónde quedan las piezas; una animación solo recibe entradas y cuenta cómo llegan ahí, con su cámara y sus luces. Los ensamblajes se encadenan (Assembly 1 → Assembly 2 → …) y cada animación arranca donde terminó la anterior de la cadena. |
 | Entrega sin servidor | El autor exporta un archivo de proyecto (ZIP con JSON y binarios); el visor lo abre en la misma app o se publica como sitio estático. |
 | Un solo idioma en el código | Código, comentarios, commits y textos de interfaz en inglés. |
 | El visor va antes que el motor de ensamblaje | Es lo que convierte esto en un producto; con el gizmo actual ya se pueden montar piezas a mano. |
@@ -65,37 +65,49 @@ Comprobado a mano por el autor el 2026-11-16.
 | `feat: download a library mesh from the board's side panel` | Botón de descarga en cada pieza de la biblioteca; guarda el archivo original. |
 | `feat: choose the camera format and background of an exported video` | Formato de cámara por etapa (16:9, 9:16, 1:1, 4:3; migración a versión 9). Fondo del video: color sólido (blanco por defecto), transparente o espacio de trabajo. Sin cámara de animación, el video toma la forma de la vista. El gizmo ya no sale en el video y exportar pausa la reproducción. |
 
-### Pendiente de estas ramas
+### Ensamblaje y animación (ramas `feat/assembly-joints-and-locks` … `feat/lights-across-shared-pieces`) ✅
 
-- Fusionar `feat/export-and-board-tools` en `main` (contiene a `h0/back-to-green`).
-- Subir `main` a GitHub.
+Visto por el autor el 2026-11-16 ("hasta el momento todo bien"); quedan por afinar a ojo las sombras y las intensidades de los presets de luz.
 
-## 6. Hitos pendientes
+| Commit | Qué hizo |
+|---|---|
+| `feat: joined pieces move together, and assembly inputs can be worked on` | Las piezas unidas se mueven juntas; las piezas de un ensamblaje de entrada se pueden desbloquear (candado) y recolocar. |
+| `feat: animations start from where the assembly chain leaves the pieces` y los dos `fix` siguientes | Cadena de ensamblajes: cada animación arranca donde terminó la anterior; importar posiciones de otra animación que comparta piezas. |
+| `feat: name stages and cameras, and import a camera from another animation` | Nombres de etapas y cámaras; importar una cámara. |
+| `feat: animations take inputs only and hold where their pieces start` | Una animación solo recibe entradas y guarda las poses de inicio de sus piezas. |
+| `feat: a stage's view comes back as it was left` | Al volver a una etapa se recuperan candados, selección, cabezal de reproducción y cámara de trabajo. |
+| `feat: animations have their own lighting` | Luces (ambiente, direccional, puntual, foco) como objetos del mundo animables, presets, entorno, sombras y suelo opcional. |
+| `refactor: give the animation panel its room back` | Panel de animación compacto: secciones plegables, ayudas en tooltips. |
+| `feat: import lighting from any animation sharing pieces` | La iluminación se importa de cualquier animación que comparta piezas; sola, solo se hereda hacia adelante en la cadena. |
 
-### H1 — Datos seguros
+### H1 — Datos seguros (rama `h1/safe-data`) — pendiente de comprobar a mano
 
 **Objetivo:** que no se pueda perder trabajo y que un proyecto se pueda mover entre navegadores.
 
-Tareas:
+Qué se hizo (commit `feat: keep mesh files safe, and carry a project in one file`):
 
-1. Guardar los binarios de las mallas en IndexedDB, con el hash del archivo como clave. El store solo conserva metadatos (nombre, extensión, tamaño, hash).
-2. Migrar los proyectos existentes: mover el base64 de `MeshRecord.data` a IndexedDB.
-3. Quitar el límite silencioso de 8 MB de `MeshLibrary.tsx`.
-4. Caché de geometría por malla, para no volver a parsear los STL cada vez que se abre una etapa.
-5. Liberar memoria al cerrar una etapa en `worldSession.ts`: geometrías, materiales, contexto WebGL y el listener de `resize`.
-6. Errores visibles (avisos en pantalla) para: carga fallida de una pieza, cuota llena y formato no soportado. Hoy solo van a la consola.
-7. Exportar e importar el proyecto como archivo (ZIP con JSON y binarios). `lib/zip.ts` hoy solo escribe; hay que añadir la lectura.
-
-Archivos principales: `store/persistStorage.ts`, `store/projectsSlice.ts`, `lib/migrations.ts`, `lib/three/buildMesh.ts`, `lib/three/worldSession.ts`, `hooks/useWorldSession.ts`, `views/BoardView/MeshLibrary.tsx`, `views/ProjectsView/*`, `lib/zip.ts`.
-
-**Hecho cuando:** un proyecto con varios STL de 20 MB sobrevive a recargar, y se exporta e importa en otro navegador sin perder nada.
+1. Los archivos de malla viven en IndexedDB, una entrada por archivo distinto, con el hash de su contenido como clave (`lib/meshFiles.ts`). El proyecto guardado solo lleva hash y tamaño (esquema 15).
+2. Los proyectos antiguos mueven su base64 a IndexedDB al arrancar (`store/startup.ts`); un archivo solo sale del proyecto cuando ya está guardado. Los archivos que ningún proyecto usa se limpian un día después.
+3. Sin límite de tamaño al importar mallas.
+4. Cada archivo se parsea una vez y se comparte entre los objetos que salen de él.
+5. Cerrar una etapa libera buffers, shaders y el contexto WebGL.
+6. Avisos en pantalla (`components/Notices.tsx`): archivo que no es una malla, que no se pudo guardar o cargar, cambios que no se pudieron guardar, navegador que no conserva archivos.
+7. Exportar un proyecto a un archivo `.meshstudio` (ZIP con `project.json` y sus mallas) e importarlo como proyecto nuevo; `lib/zip.ts` ya lee.
 
 Comprobación manual:
 
-- Importar varios STL grandes, recargar y abrir una etapa.
-- Abrir un proyecto antiguo (guardado en base64) y confirmar que sigue completo.
-- Exportar el proyecto, importarlo en otro navegador y compararlo.
-- Importar un archivo que no es una malla y ver el aviso.
+- Abrir la app con los proyectos de siempre: deben seguir completos (sus mallas pasan solas a IndexedDB) y abrirse sus etapas.
+- Importar varios STL grandes (20 MB), recargar y abrir una etapa.
+- Exportar un proyecto (botón "Export" de su tarjeta), importarlo con "Import project" — a ser posible en otro navegador — y compararlo.
+- Cargar en la biblioteca un archivo que no es una malla y ver el aviso.
+- Entrar y salir de varias etapas muchas veces seguidas: la vista 3D debe seguir apareciendo.
+
+### Pendiente de estas ramas
+
+- Fusionar `h1/safe-data` en `main` (contiene a todas las anteriores).
+- Subir `main` a GitHub.
+
+## 6. Hitos pendientes
 
 ### H2 — Secuencia de pasos
 
@@ -103,8 +115,8 @@ Comprobación manual:
 
 Tareas:
 
-1. Nuevo modelo: `Step { id, title, instructions, stageId }` y `project.sequence` (lista ordenada).
-2. Fusionar la animación dentro de la etapa y eliminar el nodo "animation" del tablero, con migración de los proyectos existentes.
+1. Nuevo modelo: `Step { id, title, instructions, stageId }` y `project.sequence` (lista ordenada). Un paso apunta a una animación (o a un ensamblaje sin animar).
+2. ~~Fusionar la animación dentro de la etapa~~ — descartado: ensamblajes y animaciones siguen como nodos separados (ver decisiones).
 3. Eliminar campos sin uso: `union`, `camera.tracked`, `MeshRecord.origin`, `MeshRecord.color`, `StageMember.color`, el estado `pending` de las uniones.
 4. Una sola fuente de verdad para las entradas de una etapa. Hoy están en las conexiones del tablero y, a la vez, en `stage.members`, y pueden quedar huérfanas.
 5. Panel de pasos: crear, reordenar, renombrar y escribir instrucciones.
@@ -180,6 +192,10 @@ Tareas:
 ## 7. Cabos sueltos
 
 - **Formato:** Prettier marca unos 39 archivos antiguos. Hacer un commit aparte de solo formato.
+- **Posiciones:** importar posiciones lista cualquier animación que comparta piezas; la iluminación ya sigue la misma regla.
+- **Memoria de vista:** se guarda al salir de la etapa, no en cada cambio (recargar sin salir la pierde).
+- **Archivos `.gltf` con `.bin` aparte:** no se cargan; usar `.glb`.
+- **Aviso de lint** en `components/Fold.tsx` (exporta un hook junto al componente).
 - **Transparencia en WebM:** depende del navegador y del reproductor. En fotogramas PNG es segura.
 - **Aviso de lint** en `useWorldSession.ts` (un `setState` dentro de un efecto). Se resuelve al dividir ese archivo en H3.
 - **Indicador `cameraDriven`** en `worldSession.ts`: nunca se activa. Se limpia al dividir ese archivo.
@@ -189,7 +205,6 @@ Tareas:
 
 ## 8. Orden recomendado
 
-1. Fusionar `feat/export-and-board-tools` en `main` y subir.
-2. H1, porque es el único punto donde hoy se puede perder trabajo.
-3. H2 y H3 seguidos: juntos entregan la idea original.
-4. H4, H5 y H6 según lo que más se eche en falta al usar el visor.
+1. Comprobar H1 a mano, fusionar `h1/safe-data` en `main` y subir.
+2. H2 y H3 seguidos: juntos entregan la idea original.
+3. H4, H5 y H6 según lo que más se eche en falta al usar el visor.
