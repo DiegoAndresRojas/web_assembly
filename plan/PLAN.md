@@ -114,7 +114,12 @@ Qué se hizo (commit `feat: an ordered sequence of steps, and undo on the board`
 4. Deshacer y rehacer en el tablero (Ctrl+Z, Ctrl+Shift+Z y botones): soltar, mover, conectar, renombrar, duplicar y borrar nodos, borrar mallas de la biblioteca, color, escala y los pasos. El historial se vacía al abrir una etapa.
 5. Borrar una etapa avisa en pantalla de que Ctrl+Z la recupera (en lugar de pedir confirmación).
 
-Queda de H2 (no hecho): eliminar campos sin uso y la fuente única de verdad para las entradas de una etapa.
+Y en la rama `h2/inputs-and-leftovers` (commit `refactor: the board's edges alone say what a stage takes in`, esquema 17):
+
+6. Fuente única de verdad: qué entra en una etapa lo dicen solo las conexiones del tablero. Lo que la etapa guarda sobre sus entradas (poses, uniones, pistas, poses de inicio, piezas desbloqueadas) se pone en línea con ellas tras cada cambio de estructura y al cargar un proyecto (`lib/stageInputs.ts`). Quitar una conexión ya no deja datos huérfanos, tampoco en las etapas de más abajo en la cadena.
+7. Campos sin uso eliminados: `union` (y su botón "Union"; "Download" ya no depende de él), `camera.tracked`, `MeshRecord.origin`, `MeshRecord.color`, `StageMember.color` y el estado `pending` de las uniones.
+
+H2 queda completo.
 
 Comprobación manual:
 
@@ -122,6 +127,8 @@ Comprobación manual:
 - Abrir un paso y pasar al siguiente y al anterior con las flechas de la cabecera.
 - Borrar una etapa del tablero y recuperarla con Ctrl+Z, con su contenido y su paso.
 - Mover un nodo, deshacer y rehacer.
+- Quitar la conexión de una pieza a un ensamblaje y volver a ponerla: la pieza vuelve sin su pose ni sus uniones anteriores (Ctrl+Z las recupera).
+- En un ensamblaje, "Download" funciona sin pulsar antes "Union" (ese botón ya no existe).
 
 ### H3 — Visor (rama `h3/viewer`) — pendiente de comprobar a mano
 
@@ -144,7 +151,7 @@ Comprobación manual:
 
 ### Pendiente de estas ramas
 
-- Fusionar `h3/viewer` en `main` (contiene a todas las anteriores).
+- Fusionar `h2/inputs-and-leftovers` en `main` (contiene a todas las anteriores, H3 incluido).
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes
@@ -245,6 +252,6 @@ Tareas:
 
 ## 8. Orden recomendado
 
-1. Comprobar H2 y H3 a mano, fusionar `h3/viewer` en `main` y subir.
-2. Lo que quedó fuera de H2 y H3 (ver arriba), según haga falta.
+1. Comprobar H2 y H3 a mano, fusionar `h2/inputs-and-leftovers` en `main` y subir.
+2. Lo que quedó fuera de H3 (ver arriba), según haga falta.
 3. H4, H5 y H6 según lo que más se eche en falta al usar el visor.
