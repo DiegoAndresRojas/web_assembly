@@ -11,6 +11,8 @@ import type { MeshRecord } from '@/types/project'
 
 const DB_NAME = 'meshstudio'
 const STORE = 'files'
+/** Pictures of the files, made once and kept (see lib/thumbnails.ts). */
+const THUMBS = 'thumbs'
 
 interface StoredFile {
   data: ArrayBuffer
@@ -28,8 +30,13 @@ function openDb(): Promise<IDBDatabase | null> {
       return
     }
     try {
-      const request = indexedDB.open(DB_NAME, 1)
-      request.onupgradeneeded = () => request.result.createObjectStore(STORE)
+      const request = indexedDB.open(DB_NAME, 2)
+      request.onupgradeneeded = () => {
+        const names = request.result.objectStoreNames
+        for (const name of [STORE, THUMBS]) {
+          if (!names.contains(name)) request.result.createObjectStore(name)
+        }
+      }
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => resolve(null)
       request.onblocked = () => resolve(null)
@@ -44,10 +51,11 @@ function run<T>(
   db: IDBDatabase,
   mode: IDBTransactionMode,
   work: (store: IDBObjectStore) => IDBRequest<T>,
+  storeName: string = STORE,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode)
-    const request = work(tx.objectStore(STORE))
+    const tx = db.transaction(storeName, mode)
+    const request = work(tx.objectStore(storeName))
     tx.oncomplete = () => resolve(request.result)
     tx.onerror = () => reject(tx.error ?? new Error('storage error'))
     tx.onabort = () => reject(tx.error ?? new Error('storage error'))
@@ -175,7 +183,49 @@ export function formatBytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+// ---------- thumbnails ----------
+
+const memoryThumbs = new Map<string, string>()
+
+/** A kept picture (a data URL) by its key, or null. */
+export async function getThumb(key: string): Promise<string | null> {
+  const db = await openDb()
+  if (!db) return memoryThumbs.get(key) ?? null
+  return (await run<string | undefined>(db, 'readonly', (s) => s.get(key), THUMBS)) ?? null
+}
+
+export async function putThumb(key: string, dataUrl: string): Promise<void> {
+  const db = await openDb()
+  if (!db) memoryThumbs.set(key, dataUrl)
+  else await run(db, 'readwrite', (s) => s.put(dataUrl, key), THUMBS)
+}
+
+/** Removes the kept pictures of files no project uses any more. A key
+ *  starts with the hash of its file, up to the first dot. */
+export async function dropUnusedThumbs(used: ReadonlySet<string>): Promise<void> {
+  const unused = (key: string) => !used.has(key.slice(0, key.indexOf('.')))
+  const db = await openDb()
+  if (!db) {
+    for (const key of Array.from(memoryThumbs.keys())) if (unused(key)) memoryThumbs.delete(key)
+    return
+  }
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(THUMBS, 'readwrite')
+    const cursor = tx.objectStore(THUMBS).openKeyCursor()
+    cursor.onsuccess = () => {
+      const at = cursor.result
+      if (!at) return
+      if (unused(String(at.key))) tx.objectStore(THUMBS).delete(at.key)
+      at.continue()
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('storage error'))
+    tx.onabort = () => reject(tx.error ?? new Error('storage error'))
+  })
+}
+
 /** For tests: forgets every file held in memory. */
 export function clearMemoryFiles(): void {
   memory.clear()
+  memoryThumbs.clear()
 }

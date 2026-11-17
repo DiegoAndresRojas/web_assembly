@@ -12,18 +12,21 @@ export function DeleteProjectDialog() {
     <Dialog
       open={open}
       title="Delete project"
+      onClose={cancel}
       actions={
         <>
           <Button variant="secondary" onClick={cancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={confirmDelete}>
+          <Button variant="danger" onClick={confirmDelete}>
             Delete
           </Button>
         </>
       }
     >
-      {open ? `${confirm.label} and its board will be removed. This cannot be undone.` : null}
+      {open
+        ? `${confirm.label} will be removed with everything in it. This cannot be undone — export it first if you may want it back.`
+        : null}
     </Dialog>
   )
 }

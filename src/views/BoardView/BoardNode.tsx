@@ -1,6 +1,7 @@
 import type { PointerEvent } from 'react'
 
 import { FilmIcon, LinkHandleIcon, PlusIcon } from '@/components/icons'
+import { MeshThumb } from '@/components/MeshThumb'
 import { NameField } from '@/components/NameField'
 import { stageName } from '@/lib/cameras'
 import { MESH_H, MESH_W, NODE_W } from '@/lib/constants'
@@ -142,27 +143,22 @@ export function BoardNode({
             <div
               style={{
                 flex: 1,
-                display: 'grid',
-                placeItems: 'center',
-                backgroundImage:
-                  'repeating-linear-gradient(135deg, var(--color-neutral-900), var(--color-neutral-900) 5px, transparent 5px, transparent 10px)',
+                minHeight: 0,
+                position: 'relative',
+                background: 'var(--color-neutral-900)',
               }}
             >
-              <span
-                style={{
-                  fontFamily: 'ui-monospace, monospace',
-                  fontSize: 12,
-                  color: 'var(--color-neutral-400)',
-                }}
+              <div
+                style={{ position: 'absolute', inset: 6, display: 'grid', placeItems: 'center' }}
               >
-                {mesh?.ext.toUpperCase() ?? ''}
-              </span>
+                <MeshThumb mesh={mesh} color={node.color} />
+              </div>
               {node.scale !== 1 && (
                 <span
                   title={`Scaled ×${node.scale}`}
                   style={{
                     position: 'absolute',
-                    top: node.color ? 10 : 6,
+                    top: 6,
                     right: 6,
                     padding: '1px 5px',
                     borderRadius: 'var(--radius-sm)',
@@ -255,11 +251,7 @@ export function BoardNode({
               color,
             }}
           >
-            {node.kind === 'animation' ? (
-              <FilmIcon size={25} />
-            ) : (
-              <PlusIcon size={26} />
-            )}
+            {node.kind === 'animation' ? <FilmIcon size={25} /> : <PlusIcon size={26} />}
           </div>
           {showOut && (
             <div

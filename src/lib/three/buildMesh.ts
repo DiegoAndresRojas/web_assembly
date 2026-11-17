@@ -93,6 +93,16 @@ export function buildMesh(meshRecord: MeshRecord): Promise<THREE.Object3D> {
   return reading.then((object) => object.clone(true))
 }
 
+/** Whether the file is in memory, parsed (or on its way). */
+export function isParsed(meshRecord: MeshRecord): boolean {
+  return parsed.has(cacheKey(meshRecord))
+}
+
+/** Lets go of one parsed file. */
+export function forgetParsedMesh(meshRecord: MeshRecord): void {
+  parsed.delete(cacheKey(meshRecord))
+}
+
 /** Forgets the parsed files other than those of `meshes` — called with
  *  the open project's library, so memory holds one project's parts. */
 export function keepParsedMeshes(meshes: MeshRecord[]): void {

@@ -69,6 +69,9 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.pid = id
         state.pan = { x: 60, y: 60 }
         state.zoom = 1
+        state.boardFit = true
+        state.selId = null
+        state.selEdge = null
       })
       get().clearBoardHistory()
     },

@@ -62,10 +62,10 @@ export function BoardToolSwitcher() {
   )
 }
 
-export function BoardZoomControls() {
+export function BoardZoomControls({ onFit }: { onFit: () => void }) {
   const zoomIn = useStore((s) => s.zoomIn)
   const zoomOut = useStore((s) => s.zoomOut)
-  const resetView = useStore((s) => s.resetView)
+  const zoom = useStore((s) => s.zoom)
   return (
     <div
       style={{
@@ -77,14 +77,17 @@ export function BoardZoomControls() {
         alignItems: 'center',
       }}
     >
-      <Button variant="secondary" icon onClick={zoomOut}>
+      <span className="text-muted" style={{ fontSize: 11, minWidth: 34, textAlign: 'right' }}>
+        {Math.round(zoom * 100)}%
+      </span>
+      <Button variant="secondary" icon title="Zoom out" onClick={zoomOut}>
         <ZoomOutIcon />
       </Button>
-      <Button variant="secondary" icon onClick={zoomIn}>
+      <Button variant="secondary" icon title="Zoom in" onClick={zoomIn}>
         <ZoomInIcon />
       </Button>
-      <Button variant="secondary" onClick={resetView}>
-        Reset view
+      <Button variant="secondary" title="Bring the whole board into view" onClick={onFit}>
+        Fit
       </Button>
     </div>
   )

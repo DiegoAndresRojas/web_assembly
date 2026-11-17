@@ -149,9 +149,27 @@ Comprobación manual:
 - Paso que es un ensamblaje (sin animación): se ve montado, sin botón de reproducir.
 - Abrir la app con `?viewer` al final de la dirección: solo "Import project" y "View".
 
+Todo lo anterior está fusionado en `main` (2026-11-16).
+
+### Experiencia de proyectos y tablero (rama `feat/projects-and-board-ux`) — pendiente de comprobar a mano
+
+Primer bloque (commit `feat: a fuller projects page and board`, esquema 18):
+
+- **Miniaturas 3D** de las piezas en la biblioteca, en los nodos del tablero (con su color) y en las tarjetas de proyecto. Se generan una vez y se guardan junto al archivo.
+- **Tarjetas de proyecto:** miniaturas, renombrar en el sitio, nº de mallas / etapas / pasos, "Edited 3 h ago", duplicar, exportar y borrar como iconos. Orden por última edición; buscador a partir de 7 proyectos; soltar un archivo de proyecto sobre la página lo importa.
+- **Tablero:** soltar archivos del ordenador en la biblioteca o en el tablero; Supr borra lo seleccionado y Esc lo suelta; zoom hacia el puntero; "Fit" encuadra todo (y al abrir un proyecto); porcentaje de zoom.
+- **Diálogos:** rol de diálogo, Esc cierra, el foco entra en ellos; botón rojo para borrar.
+- **Estados vacíos** con indicaciones en proyectos, biblioteca y tablero.
+
+Comprobación manual:
+
+- Las miniaturas aparecen en biblioteca, tablero y tarjetas (la primera vez tardan; después son inmediatas).
+- Renombrar, duplicar y borrar un proyecto desde su tarjeta; soltar un `.meshstudio` sobre la página.
+- En el tablero: soltar un STL desde el explorador, Supr, Esc, rueda del ratón y "Fit".
+
 ### Pendiente de estas ramas
 
-- Fusionar `h2/inputs-and-leftovers` en `main` (contiene a todas las anteriores, H3 incluido).
+- Fusionar `feat/projects-and-board-ux` en `main` cuando esté comprobada.
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes

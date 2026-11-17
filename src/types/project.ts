@@ -238,6 +238,10 @@ export interface Step {
 export interface Project {
   id: string
   name: string
+  /** When it was made and last changed, in ms since the epoch (0: not
+   *  known — saved before this was kept). */
+  createdAt: number
+  updatedAt: number
   meshes: MeshRecord[]
   board: Board
   stages: Record<string, Stage>

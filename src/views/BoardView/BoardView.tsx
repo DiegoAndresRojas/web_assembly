@@ -86,7 +86,23 @@ export function BoardView() {
       const el = e.target as HTMLElement | null
       const typing =
         !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)
-      if (typing || !(e.ctrlKey || e.metaKey)) return
+      if (typing) return
+      const state = useStore.getState()
+      // (a dialog that is open has the keyboard)
+      if (state.confirm || state.colorEdit || state.scaleEdit) return
+      if (!(e.ctrlKey || e.metaKey)) {
+        // Delete removes what is selected; Escape lets go of it
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (state.selEdge) state.deleteSelectedEdge()
+          else if (state.selId) state.deleteNode(state.selId)
+          else return
+          e.preventDefault()
+        } else if (e.key === 'Escape') {
+          state.cancelLinking()
+          state.selectNode(null)
+        }
+        return
+      }
       const key = e.key.toLowerCase()
       if (key !== 'z' && key !== 'y') return
       e.preventDefault()

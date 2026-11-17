@@ -817,3 +817,80 @@ a:hover {
     display: none;
   }
 }
+
+/* ---- destructive actions ---- */
+
+.btn-danger {
+  background: #b8483f;
+  color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #d05a50;
+}
+
+.tool-btn--danger:hover {
+  color: #e8837a;
+}
+
+/* ---- project cards ---- */
+
+.project-card {
+  gap: 2px;
+}
+
+.project-thumbs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 104px;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  cursor: pointer;
+}
+
+.project-thumbs:hover {
+  background: var(--color-neutral-800);
+}
+
+.project-thumbs:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.project-thumb {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 96px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.project-thumbs-more {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 10px;
+  color: var(--color-neutral-400);
+}
+
+/* ---- dropping files ---- */
+
+.drop-veil {
+  position: fixed;
+  inset: var(--space-3);
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: rgba(22, 24, 38, 0.82);
+  color: var(--color-accent-100);
+  font-size: 15px;
+  pointer-events: none;
+}

@@ -53,9 +53,10 @@ import type {
 // 17: the board's edges alone say what a stage takes in — stage records
 //     are brought in line with them; fields nothing used are gone (union,
 //     camera.tracked, mesh origin / color, member color, 'pending' links).
+// 18: projects know when they were made and last changed.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 17
+export const CURRENT_VERSION = 18
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -370,6 +371,8 @@ export function normalizeProject(raw: unknown): Project | null {
   const project: Project = {
     id: typeof p.id === 'string' && p.id ? p.id : uid(),
     name: typeof p.name === 'string' && p.name ? p.name : 'Project',
+    createdAt: Math.max(0, num(p.createdAt, 0)),
+    updatedAt: Math.max(0, num(p.updatedAt, 0)),
     meshes,
     board,
     stages,

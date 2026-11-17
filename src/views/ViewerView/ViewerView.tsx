@@ -9,7 +9,7 @@ import {
   PlayIcon,
   SkipBackIcon,
 } from '@/components/icons'
-import { useWorldSession } from '@/hooks/useWorldSession'
+import { resetViewerOrbit, useWorldSession } from '@/hooks/useWorldSession'
 import { placeIn, sequenceOf } from '@/lib/steps'
 import { stageDuration } from '@/lib/timeline'
 import { useStore } from '@/store'
@@ -41,6 +41,8 @@ export function ViewerView({ stageId }: { stageId: string }) {
   const closeViewer = useStore((s) => s.closeViewer)
   const onAnimPlay = useStore((s) => s.onAnimPlay)
   const seekTo = useStore((s) => s.seekTo)
+  // (before the 3D world is made: the first step is seen from the default view)
+  useEffect(() => resetViewerOrbit(), [])
   const session = useWorldSession(container, stageId)
 
   const steps = project ? sequenceOf(project) : []

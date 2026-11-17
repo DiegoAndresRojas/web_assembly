@@ -63,4 +63,24 @@ export const useStore = create<AppState>()(
   ),
 )
 
+/** How stale a project's "last changed" may get before it is refreshed. */
+const TOUCH_EVERY_MS = 60 * 1000
+
+// keeps each project's "last changed" up to date: a project that is
+// changed gets the time — at most once a minute, not on every edit
+useStore.subscribe((state, before) => {
+  if (state.projects === before.projects) return
+  const now = Date.now()
+  const changed = state.projects
+    .filter((p) => {
+      const was = before.projects.find((q) => q.id === p.id)
+      return !!was && was !== p && now - p.updatedAt > TOUCH_EVERY_MS
+    })
+    .map((p) => p.id)
+  if (!changed.length) return
+  useStore.setState((s) => {
+    for (const p of s.projects) if (changed.includes(p.id)) p.updatedAt = now
+  })
+})
+
 export { COLOR_PRESETS } from './projectsSlice'

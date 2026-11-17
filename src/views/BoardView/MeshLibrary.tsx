@@ -1,6 +1,7 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState, type DragEvent } from 'react'
 
 import { CloseIcon, DownloadIcon, PlusIcon } from '@/components/icons'
+import { MeshThumb } from '@/components/MeshThumb'
 import { triggerDownload } from '@/lib/download'
 import { formatBytes, meshBytes, MESH_EXTS } from '@/lib/meshFiles'
 import { useStore } from '@/store'
@@ -9,6 +10,8 @@ import type { MeshRecord, Project } from '@/types/project'
 export interface MeshLibraryProps {
   project: Project
 }
+
+const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
 
 /** The name to save a library file under — its own, with its extension. */
 function fileName(mesh: MeshRecord): string {
@@ -24,6 +27,7 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
   const working = useStore((s) => s.working)
   const askDeleteMesh = useStore((s) => s.askDeleteMesh)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [dropping, setDropping] = useState(false)
 
   const exts = useMemo(
     () => Array.from(new Set(project.meshes.map((m) => m.ext))).filter(Boolean),
@@ -130,8 +134,37 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
           padding: 'var(--space-2)',
           borderRadius: 'var(--radius-md)',
           background: 'var(--color-neutral-900)',
+          outline: dropping ? '2px dashed var(--color-accent)' : 'none',
+          outlineOffset: -2,
+        }}
+        onDragOver={(e) => {
+          if (!hasFiles(e)) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDropping(true)
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={(e) => {
+          if (!hasFiles(e)) return
+          e.preventDefault()
+          e.stopPropagation()
+          setDropping(false)
+          void importMeshFiles(project.id, Array.from(e.dataTransfer.files))
         }}
       >
+        {project.meshes.length === 0 && (
+          <div
+            className="text-muted"
+            style={{
+              gridColumn: '1 / -1',
+              padding: 'var(--space-2)',
+              fontSize: 11,
+              lineHeight: 1.5,
+            }}
+          >
+            The parts of your product go here. Click <b>+</b> or drop STL, OBJ or GLB files.
+          </div>
+        )}
         {meshes.map((m) => (
           <div
             key={m.id}
@@ -147,20 +180,18 @@ export function MeshLibrary({ project }: MeshLibraryProps) {
               background: 'var(--color-bg)',
               display: 'grid',
               placeItems: 'center',
-              backgroundImage:
-                'repeating-linear-gradient(135deg, var(--color-neutral-800), var(--color-neutral-800) 5px, transparent 5px, transparent 10px)',
             }}
           >
-            <span
+            <div
               style={{
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: 9,
-                letterSpacing: '0.04em',
-                color: 'var(--color-neutral-400)',
+                position: 'absolute',
+                inset: '6px 6px 20px',
+                display: 'grid',
+                placeItems: 'center',
               }}
             >
-              {m.ext.toUpperCase()}
-            </span>
+              <MeshThumb mesh={m} />
+            </div>
             {(m.hash || m.data) && (
               <button
                 type="button"

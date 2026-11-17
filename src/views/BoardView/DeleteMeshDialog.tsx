@@ -12,19 +12,20 @@ export function DeleteMeshDialog() {
     <Dialog
       open={open}
       title="Delete mesh"
+      onClose={cancel}
       actions={
         <>
           <Button variant="secondary" onClick={cancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={confirmDelete}>
+          <Button variant="danger" onClick={confirmDelete}>
             Delete
           </Button>
         </>
       }
     >
       {open
-        ? `${confirm.label} will be removed from the project, along with any board tiles using it.`
+        ? `${confirm.label} will be removed from the project, along with the pieces on the board that use it. Ctrl+Z on the board brings it back.`
         : null}
     </Dialog>
   )

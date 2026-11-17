@@ -1,5 +1,11 @@
 // What the app does on its own once the saved projects are loaded.
-import { dataUrlBytes, dropUnusedFiles, filesAreKept, putFile } from '@/lib/meshFiles'
+import {
+  dataUrlBytes,
+  dropUnusedFiles,
+  dropUnusedThumbs,
+  filesAreKept,
+  putFile,
+} from '@/lib/meshFiles'
 import { savedProjectsWereRead } from './persistStorage'
 import type { AppState } from './types'
 
@@ -51,6 +57,7 @@ async function dropOrphanFiles(store: StoreApi): Promise<void> {
     for (const mesh of project.meshes) if (mesh.hash) used.add(mesh.hash)
   }
   await dropUnusedFiles(used, 24 * 60 * 60 * 1000)
+  await dropUnusedThumbs(used)
 }
 
 export async function runStartupTasks(store: StoreApi): Promise<void> {

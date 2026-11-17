@@ -4,6 +4,7 @@ import { edgeFor } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
 
+import { stageName } from '@/lib/cameras'
 import { recoverFromChain } from '@/lib/chain'
 import { recoverLightsFromChain } from '@/lib/lights'
 import { reconcileProject } from '@/lib/stageInputs'
@@ -24,6 +25,7 @@ export const initialBoardState: BoardState = {
   selEdge: null,
   linking: null,
   meshFilterExt: null,
+  boardFit: false,
   hoverAssembly: false,
   hoverAnimation: false,
 }
@@ -85,6 +87,46 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       set((state) => {
         state.pan = { x: 60, y: 60 }
         state.zoom = 1
+      })
+    },
+    zoomAt(delta, x, y) {
+      set((state) => {
+        const next = clamp(state.zoom + delta, ZOOM_MIN, ZOOM_MAX)
+        const k = next / state.zoom
+        state.pan = { x: x - (x - state.pan.x) * k, y: y - (y - state.pan.y) * k }
+        state.zoom = next
+      })
+    },
+    fitBoard(width, height) {
+      set((state) => {
+        state.boardFit = false
+        const nodes = findProject(state, state.pid)?.board.nodes ?? []
+        if (!nodes.length || width <= 0 || height <= 0) {
+          state.pan = { x: 60, y: 60 }
+          state.zoom = 1
+          return
+        }
+        const boxes = nodes.map((n) => nodeBox(n.kind, n.x, n.y))
+        const left = Math.min(...boxes.map((b) => b.left))
+        const right = Math.max(...boxes.map((b) => b.right))
+        const top = Math.min(...boxes.map((b) => b.top))
+        const bottom = Math.max(...boxes.map((b) => b.bottom))
+        // room around for the toolbars and a node's own menu; never closer
+        // than life size
+        const margin = 90
+        const zoom = clamp(
+          Math.min(
+            (width - 2 * margin) / Math.max(right - left, 1),
+            (height - 2 * margin) / Math.max(bottom - top, 1),
+          ),
+          ZOOM_MIN,
+          1,
+        )
+        state.zoom = zoom
+        state.pan = {
+          x: width / 2 - ((left + right) / 2) * zoom,
+          y: height / 2 - ((top + bottom) / 2) * zoom,
+        }
       })
     },
     setPan(x, y) {
@@ -304,7 +346,15 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     linkIfDropped: recorded(actions.linkIfDropped),
     renameNode: recorded(actions.renameNode),
     duplicateNode: recorded(actions.duplicateNode),
-    deleteNode: recorded(actions.deleteNode),
+    deleteNode(nodeId) {
+      const { pid, projects } = get()
+      const node = projects.find((p) => p.id === pid)?.board.nodes.find((n) => n.id === nodeId)
+      recorded(actions.deleteNode)(nodeId)
+      // a stage goes with everything made inside it: say how to get it back
+      if (node && node.kind !== 'mesh') {
+        get().notify(`${stageName(node)} deleted — Ctrl+Z brings it back.`, 'info')
+      }
+    },
     completeLinking: recorded(actions.completeLinking),
     removeEdge: recorded(actions.removeEdge),
     deleteSelectedEdge: recorded(actions.deleteSelectedEdge),

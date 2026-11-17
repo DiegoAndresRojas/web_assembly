@@ -1,12 +1,12 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 
-import { stageName } from '@/lib/cameras'
 import { useStore } from '@/store'
 import type { NodeKind, Project } from '@/types/project'
 import { BoardNode } from './BoardNode'
@@ -45,7 +45,6 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const deleteNode = useStore((s) => s.deleteNode)
   const duplicateNode = useStore((s) => s.duplicateNode)
   const renameNode = useStore((s) => s.renameNode)
-  const zoomBy = useStore((s) => s.zoomBy)
   const startLinking = useStore((s) => s.startLinking)
   const updateLinking = useStore((s) => s.updateLinking)
   const completeLinking = useStore((s) => s.completeLinking)
@@ -57,7 +56,20 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const openColorEditor = useStore((s) => s.openColorEditor)
   const openStage = useStore((s) => s.openStage)
   const pushBoardHistory = useStore((s) => s.pushBoardHistory)
-  const notify = useStore((s) => s.notify)
+  const zoomAt = useStore((s) => s.zoomAt)
+  const fitBoard = useStore((s) => s.fitBoard)
+  const importMeshFiles = useStore((s) => s.importMeshFiles)
+
+  const fit = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (rect) fitBoard(rect.width, rect.height)
+  }, [fitBoard])
+
+  // a board that was just opened shows all of itself (coming back from a
+  // stage, it is found as it was left)
+  useEffect(() => {
+    if (useStore.getState().boardFit) fit()
+  }, [project.id, fit])
 
   const pointFromEvent = useCallback(
     (clientX: number, clientY: number) => {
@@ -108,13 +120,23 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
     }
   }
   const handleWheel = (e: ReactWheelEvent) => {
-    e.preventDefault()
-    zoomBy(e.deltaY < 0 ? 0.15 : -0.15)
+    // toward the pointer: what is under it stays under it
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    zoomAt(e.deltaY < 0 ? 0.15 : -0.15, e.clientX - rect.left, e.clientY - rect.top)
   }
   const handleDragOver = (e: DragEvent) => e.preventDefault()
   const handleDrop = (e: DragEvent) => {
     e.preventDefault()
     const p = pointFromEvent(e.clientX, e.clientY)
+    // files from the computer: into the library, and onto the board here
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length) {
+      void importMeshFiles(project.id, files).then((ids) =>
+        ids.forEach((id, i) => dropMeshOnBoard(id, p.x + i * 28, p.y + i * 28)),
+      )
+      return
+    }
     const meshId = e.dataTransfer.getData('text/ms-mesh-id')
     const kind = e.dataTransfer.getData('text/ms-node-kind') as NodeKind | ''
     if (meshId) dropMeshOnBoard(meshId, p.x, p.y)
@@ -190,10 +212,6 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             onDelete={(e) => {
               e.stopPropagation()
               deleteNode(node.id)
-              // a stage goes with everything made inside it: say how to get it back
-              if (node.kind !== 'mesh') {
-                notify(`${stageName(node)} deleted — Ctrl+Z brings it back.`, 'info')
-              }
             }}
             onRename={(name) => renameNode(node.id, name)}
             onDuplicate={(e) => {
@@ -218,7 +236,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
       </div>
 
       <BoardToolSwitcher />
-      <BoardZoomControls />
+      <BoardZoomControls onFit={fit} />
       {project.board.nodes.length === 0 && (
         <div
           className="text-muted"
@@ -227,11 +245,13 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             left: 'var(--space-8)',
             top: 'var(--space-8)',
             fontSize: 13,
-            maxWidth: '34ch',
+            maxWidth: '44ch',
+            lineHeight: 1.5,
             pointerEvents: 'none',
           }}
         >
-          Drag a mesh tile and an assembly stage here, then connect them.
+          Drag a part from the library and an assembly (the round token below it) onto the board,
+          then drop the part on the assembly to put it in. Double-click an assembly to open it.
         </div>
       )}
       {/* swallow a stray link-drag that never lands on a valid target */}

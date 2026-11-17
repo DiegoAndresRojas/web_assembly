@@ -26,7 +26,11 @@ const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
   const actions: ProjectsActions = {
     createProject(name) {
-      const project = normalizeProject({ name: name ?? 'Project' })!
+      const now = Date.now()
+      const taken = new Set(get().projects.map((p) => p.name))
+      let unique = name ?? 'Project'
+      for (let n = 2; taken.has(unique); n++) unique = `${name ?? 'Project'} ${n}`
+      const project = normalizeProject({ name: unique, createdAt: now, updatedAt: now })!
       set((state) => {
         state.projects.push(project)
       })
@@ -37,6 +41,27 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
       set((state) => {
         const p = findProject(state, pid)
         if (p) p.name = name
+      })
+    },
+
+    duplicateProject(pid) {
+      const source = get().projects.find((p) => p.id === pid)
+      if (!source) return
+      const taken = new Set(get().projects.map((p) => p.name))
+      let name = source.name + ' copy'
+      for (let n = 2; taken.has(name); n++) name = `${source.name} copy ${n}`
+      const now = Date.now()
+      // (mesh files are kept by what they hold: the copy shares them)
+      const copy = normalizeProject({
+        ...(JSON.parse(JSON.stringify(source)) as Record<string, unknown>),
+        id: null,
+        name,
+        createdAt: now,
+        updatedAt: now,
+      })
+      if (!copy) return
+      set((state) => {
+        state.projects.push(copy)
       })
     },
 
@@ -95,6 +120,7 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
           state.working = working
         })
       let stored = 0
+      const added: string[] = []
       for (const file of files) {
         const ext = extOf(file.name)
         if (!MESH_EXTS.includes(ext)) {
@@ -110,6 +136,7 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
             const project = findProject(state, pid)
             if (project && mesh) project.meshes.push(mesh)
           })
+          if (mesh) added.push(mesh.id)
           stored++
         } catch (e) {
           console.error('[mesh-studio] could not store', file.name, e)
@@ -124,6 +151,7 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
           'This browser is not keeping files (private browsing?): the meshes will be gone when the page is reloaded.',
         )
       }
+      return added
     },
 
     async exportProject(pid) {
@@ -163,6 +191,8 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
           while (names.has(`${project.name} (${n})`)) n++
           project.name = `${project.name} (${n})`
         }
+        project.updatedAt = Date.now()
+        if (!project.createdAt) project.createdAt = project.updatedAt
         set((state) => {
           state.projects.push(project)
         })

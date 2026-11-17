@@ -61,12 +61,15 @@ export interface ProjectsState {
 export interface ProjectsActions {
   createProject: (name?: string) => Project
   renameProject: (pid: string, name: string) => void
+  /** Adds an independent copy of a project (sharing its mesh files). */
+  duplicateProject: (pid: string) => void
   askDeleteProject: (id: string, name: string) => void
   cancelDeleteConfirm: () => void
   confirmDelete: () => void
   /** Stores the files and adds them to the project's library; the ones
-   *  that are not meshes, or cannot be stored, are told about on screen. */
-  importMeshFiles: (pid: string, files: File[]) => Promise<void>
+   *  that are not meshes, or cannot be stored, are told about on screen.
+   *  Resolves with the ids of the library meshes that were added. */
+  importMeshFiles: (pid: string, files: File[]) => Promise<string[]>
   /** Downloads the project as one file, mesh files included. */
   exportProject: (pid: string) => Promise<void>
   /** Adds the project held in a project file. */
@@ -146,6 +149,8 @@ export interface BoardState {
   selEdge: string | null
   linking: LinkingDraft | null
   meshFilterExt: string | null
+  /** The board was just opened: it is still to be fitted to the view. */
+  boardFit: boolean
   hoverAssembly: boolean
   hoverAnimation: boolean
 }
@@ -158,6 +163,11 @@ export interface BoardActions {
   zoomIn: () => void
   zoomOut: () => void
   resetView: () => void
+  /** Zooms keeping the board point under (x, y) — in px from the board's
+   *  top-left corner — where it is. */
+  zoomAt: (delta: number, x: number, y: number) => void
+  /** Brings every node into a view of the given size. */
+  fitBoard: (width: number, height: number) => void
   setPan: (x: number, y: number) => void
   dropMeshOnBoard: (meshId: string, x: number, y: number) => void
   dropStageOnBoard: (kind: 'assembly' | 'animation', x: number, y: number) => void
