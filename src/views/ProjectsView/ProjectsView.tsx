@@ -116,8 +116,8 @@ export function ProjectsView() {
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 var(--space-6) var(--space-8)' }}>
         <p className="text-muted" style={{ fontSize: 13, maxWidth: '60ch' }}>
           {VIEW_ONLY
-            ? 'Import a project file to follow its assembly step by step.'
-            : 'A project is a product to put together: its parts, the stages that assemble them, and the steps someone follows to do it.'}
+            ? 'Import a project file to watch how it is put together.'
+            : 'A project is a product to put together: its parts, the stages that assemble them, and the animations that show how.'}
         </p>
 
         {projects.length > 0 ? (
@@ -171,7 +171,9 @@ export function ProjectsView() {
                 >
                   <li>Load the parts of your product (STL, OBJ or GLB files).</li>
                   <li>Put them together in assemblies, one after another.</li>
-                  <li>Animate how each one goes in, and order the steps.</li>
+                  <li>
+                    Animate how each one goes in, and frame the animations into a presentation.
+                  </li>
                   <li>Hand the project file to whoever has to follow it.</li>
                 </ol>
                 <Button

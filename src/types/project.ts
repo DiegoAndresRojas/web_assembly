@@ -218,21 +218,23 @@ export interface PartLook {
   opacity: number
 }
 
+/** A presentation: a rectangle drawn on the board around the animations
+ *  it plays, one after another, left to right. Which animations those are
+ *  is said by where the nodes stand alone (lib/frames.ts). */
+export interface BoardFrame {
+  id: string
+  label: string
+  /** Its top-left corner and size, in board px. */
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface Board {
   nodes: BoardNode[]
   edges: BoardEdge[]
-}
-
-/** One step of the assembly sequence: a stage of the board, as someone
- *  following the assembly is told about it. */
-export interface Step {
-  id: string
-  /** The stage node it shows — an animation, or an assembly as it stands.
-   *  A stage is a step at most once. */
-  stageId: string
-  title: string
-  /** What to do in this step, in the author's words. */
-  instructions: string
+  frames: BoardFrame[]
 }
 
 export interface Project {
@@ -245,8 +247,6 @@ export interface Project {
   meshes: MeshRecord[]
   board: Board
   stages: Record<string, Stage>
-  /** The assembly sequence, in the order it is followed. */
-  steps: Step[]
 }
 
 /** A stage input: a mesh node (`mesh` set) or an upstream assembly node

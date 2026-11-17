@@ -1,13 +1,13 @@
 import { useEffect, type DragEvent } from 'react'
 
-import { BackIcon, FilmIcon, PlayIcon, PlusIcon } from '@/components/icons'
+import { BackIcon, FilmIcon, FrameIcon, PlusIcon } from '@/components/icons'
 import { useStore } from '@/store'
+import type { PaletteKind } from '@/store/types'
 import { BoardCanvas } from './BoardCanvas'
 import { ColorDialog } from './ColorDialog'
 import { DeleteMeshDialog } from './DeleteMeshDialog'
 import { MeshLibrary } from './MeshLibrary'
 import { ScaleDialog } from './ScaleDialog'
-import { StepsPanel } from './StepsPanel'
 
 function PaletteToken({
   icon,
@@ -21,12 +21,12 @@ function PaletteToken({
   icon: React.ReactNode
   label: string
   active: boolean
-  dataKind: 'assembly' | 'animation'
+  dataKind: PaletteKind
   onDragStart: (e: DragEvent) => void
   onEnter: () => void
   onLeave: () => void
 }) {
-  const color = dataKind === 'assembly' ? 'var(--color-accent)' : 'var(--color-neutral-400)'
+  const color = dataKind === 'animation' ? 'var(--color-neutral-400)' : 'var(--color-accent)'
   return (
     <div style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
       <div
@@ -39,10 +39,10 @@ function PaletteToken({
           cursor: 'grab',
           width: 44,
           height: 44,
-          borderRadius: '50%',
+          borderRadius: dataKind === 'frame' ? 'var(--radius-md)' : '50%',
           display: 'grid',
           placeItems: 'center',
-          border: `1px solid ${color}`,
+          border: `1px ${dataKind === 'frame' ? 'dashed' : 'solid'} ${color}`,
           color,
         }}
       >
@@ -72,10 +72,8 @@ export function BoardView() {
   const project = useStore((s) => s.projects.find((p) => p.id === s.pid))
   const backToProjects = useStore((s) => s.backToProjects)
   const renameProject = useStore((s) => s.renameProject)
-  const hoverAssembly = useStore((s) => s.hoverAssembly)
-  const hoverAnimation = useStore((s) => s.hoverAnimation)
+  const paletteHover = useStore((s) => s.paletteHover)
   const setPaletteHover = useStore((s) => s.setPaletteHover)
-  const openViewer = useStore((s) => s.openViewer)
   const boardUndo = useStore((s) => s.boardUndo)
   const boardRedo = useStore((s) => s.boardRedo)
 
@@ -95,11 +93,13 @@ export function BoardView() {
         if (e.key === 'Delete' || e.key === 'Backspace') {
           if (state.selEdge) state.deleteSelectedEdge()
           else if (state.selId) state.deleteNode(state.selId)
+          else if (state.selFrame) state.deleteFrame(state.selFrame)
           else return
           e.preventDefault()
         } else if (e.key === 'Escape') {
           state.cancelLinking()
           state.selectNode(null)
+          if (state.tool === 'frame') state.setTool('select')
         }
         return
       }
@@ -134,14 +134,6 @@ export function BoardView() {
           <button className="btn btn-ghost" onClick={backToProjects}>
             <BackIcon size={15} /> All projects
           </button>
-          <div style={{ flex: 1 }} />
-          <button
-            className="btn btn-secondary"
-            title="Follow the assembly step by step, as someone you hand it to would"
-            onClick={() => openViewer(project.id, 'board')}
-          >
-            <PlayIcon size={11} /> View
-          </button>
         </div>
         <input
           className="input"
@@ -160,8 +152,6 @@ export function BoardView() {
 
         <MeshLibrary project={project} />
 
-        <StepsPanel project={project} />
-
         <div
           style={{
             flex: 'none',
@@ -175,7 +165,7 @@ export function BoardView() {
             <PaletteToken
               icon={<PlusIcon size={20} />}
               label="Assembly"
-              active={hoverAssembly}
+              active={paletteHover === 'assembly'}
               dataKind="assembly"
               onDragStart={(e) => e.dataTransfer.setData('text/ms-node-kind', 'assembly')}
               onEnter={() => setPaletteHover('assembly')}
@@ -184,10 +174,19 @@ export function BoardView() {
             <PaletteToken
               icon={<FilmIcon size={19} />}
               label="Animation"
-              active={hoverAnimation}
+              active={paletteHover === 'animation'}
               dataKind="animation"
               onDragStart={(e) => e.dataTransfer.setData('text/ms-node-kind', 'animation')}
               onEnter={() => setPaletteHover('animation')}
+              onLeave={() => setPaletteHover(null)}
+            />
+            <PaletteToken
+              icon={<FrameIcon size={20} />}
+              label="Presentation"
+              active={paletteHover === 'frame'}
+              dataKind="frame"
+              onDragStart={(e) => e.dataTransfer.setData('text/ms-node-kind', 'frame')}
+              onEnter={() => setPaletteHover('frame')}
               onLeave={() => setPaletteHover(null)}
             />
           </div>

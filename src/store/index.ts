@@ -14,7 +14,6 @@ import { createLightsSlice } from './lightsSlice'
 import { createNoticesSlice, initialNoticesState } from './noticesSlice'
 import { createNavigationSlice, initialNavigationState } from './navigationSlice'
 import { createProjectStorage } from './persistStorage'
-import { createStepsSlice } from './stepsSlice'
 import { createProjectsSlice, initialProjectsState } from './projectsSlice'
 import type { AppState } from './types'
 import { createWorldSlice, initialWorldState } from './worldSlice'
@@ -44,7 +43,6 @@ export const useStore = create<AppState>()(
       ...createExportSlice(set),
       ...createNoticesSlice(set),
       ...createBoardHistorySlice(set, get),
-      ...createStepsSlice(set, get),
     })),
     {
       name: STORAGE_KEY,

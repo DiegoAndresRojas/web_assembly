@@ -4,6 +4,7 @@
 // see store/index.ts.
 import type { Draft } from 'immer'
 
+import type { Rect } from '@/lib/frames'
 import type { LightPreset, SceneBounds } from '@/lib/lights'
 import type { SnapMode } from '@/lib/three/surfaceSnap'
 import type { VideoBackground } from '@/lib/videoFormat'
@@ -106,10 +107,13 @@ export interface StageView {
 }
 
 export interface NavigationState {
-  /** 'viewer': the assembly as someone follows it, step by step. */
+  /** 'viewer': a presentation played, one animation after another. */
   view: 'projects' | 'board' | 'world' | 'viewer'
   /** Where closing the viewer goes back to. */
   viewerFrom: 'projects' | 'board'
+  /** The board frame the viewer plays (null: whatever the project has —
+   *  see lib/frames.ts playlistOf). */
+  viewerFrame: string | null
   pid: string | null
   aid: string | null
   wmode: WorldMode
@@ -122,11 +126,11 @@ export interface NavigationActions {
   backToProjects: () => void
   openStage: (nodeId: string) => void
   backToBoard: () => void
-  /** Plays a project's steps from the first one (says so when it has
-   *  nothing to play). */
-  openViewer: (pid: string, from: 'projects' | 'board') => void
-  /** Shows a step in the viewer and plays its animation. */
-  viewStep: (stageId: string) => void
+  /** Plays a presentation from its first animation — the given frame's,
+   *  or the project's first (says so when there is nothing to play). */
+  openViewer: (pid: string, from: 'projects' | 'board', frameId?: string) => void
+  /** Shows an animation in the viewer and plays it. */
+  viewScene: (stageId: string) => void
   closeViewer: () => void
   /** Keeps where the working camera was when a stage's 3D view closes. */
   rememberOrbit: (stageId: string, orbit: OrbitView | null) => void
@@ -139,25 +143,31 @@ export interface LinkingDraft {
   y: number
 }
 
+export type BoardTool = 'select' | 'pan' | 'frame'
+
 export interface BoardState {
   pan: { x: number; y: number }
   zoom: number
-  tool: 'select' | 'pan'
+  /** 'frame': drag out a presentation frame. */
+  tool: BoardTool
   ctrlDown: boolean
   hover: string | null
   selId: string | null
   selEdge: string | null
+  selFrame: string | null
   linking: LinkingDraft | null
   meshFilterExt: string | null
   /** The board was just opened: it is still to be fitted to the view. */
   boardFit: boolean
-  hoverAssembly: boolean
-  hoverAnimation: boolean
+  /** The palette token under the pointer (its name shows). */
+  paletteHover: PaletteKind | null
 }
 
+export type PaletteKind = 'assembly' | 'animation' | 'frame'
+
 export interface BoardActions {
-  effectiveTool: () => 'select' | 'pan'
-  setTool: (mode: 'select' | 'pan') => void
+  effectiveTool: () => BoardTool
+  setTool: (mode: BoardTool) => void
   setCtrlDown: (down: boolean) => void
   zoomBy: (delta: number) => void
   zoomIn: () => void
@@ -188,7 +198,15 @@ export interface BoardActions {
   deleteSelectedEdge: () => void
   removeEdge: (edgeId: string) => void
   setMeshFilter: (ext: string | null) => void
-  setPaletteHover: (which: 'assembly' | 'animation' | null) => void
+  setPaletteHover: (which: PaletteKind | null) => void
+  /** Adds a presentation frame of the given rectangle and selects it. */
+  addFrame: (rect: Rect) => void
+  selectFrame: (frameId: string | null) => void
+  /** Puts a frame's corner at (x, y), taking along the nodes inside it. */
+  moveFrame: (frameId: string, x: number, y: number) => void
+  resizeFrame: (frameId: string, rect: Rect) => void
+  renameFrame: (frameId: string, label: string) => void
+  deleteFrame: (frameId: string) => void
 }
 
 // ---------- board history (undo/redo on the board) ----------
@@ -204,17 +222,6 @@ export interface BoardHistoryActions {
   boardUndo: () => void
   boardRedo: () => void
   clearBoardHistory: () => void
-}
-
-// ---------- steps (the assembly sequence) ----------
-export interface StepsActions {
-  /** Makes a stage the last step. */
-  addStep: (stageId: string) => void
-  /** Adds every stage that is not a step yet, in the order they build up. */
-  addEveryStep: () => void
-  removeStep: (stepId: string) => void
-  moveStep: (stepId: string, by: number) => void
-  updateStep: (stepId: string, patch: { title?: string; instructions?: string }) => void
 }
 
 // ---------- world (assembly/animate shared) ----------
@@ -487,5 +494,4 @@ export type AppState = ProjectsState &
   NoticesState &
   NoticesActions &
   BoardHistoryState &
-  BoardHistoryActions &
-  StepsActions
+  BoardHistoryActions

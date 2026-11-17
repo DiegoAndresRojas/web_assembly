@@ -156,6 +156,22 @@ export function RestoreIcon(props: IconProps) {
 
 // ---------- transport / timeline (24×24 geometry) ----------
 
+/** A presentation frame: a dashed rectangle with a play mark in it. */
+export function FrameIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M3 5h4v1.6H4.6V9H3V5Zm7 0h4v1.6h-4V5Zm7 0h4v4h-1.6V6.6H17V5ZM3 15h1.6v2.4H7V19H3v-4Zm16.4 0H21v4h-4v-1.6h2.4V15ZM10 17.4h4V19h-4v-1.6ZM3 10.5h1.6v3H3v-3Zm16.4 0H21v3h-1.6v-3ZM10 9.2v5.6a.5.5 0 0 0 .77.42l4.2-2.8a.5.5 0 0 0 0-.84l-4.2-2.8A.5.5 0 0 0 10 9.2Z"
+    />
+  )
+}
+
+/** Next in a sequence (the mirror of SkipBackIcon). */
+export function SkipNextIcon(props: IconProps) {
+  return <Icon {...props} viewBox="0 0 24 24" path="M16 4h3v16h-3zM5 5.1v13.8a1 1 0 0 0 1.55.83l8.55-6.9a1 1 0 0 0 0-1.66l-8.55-6.9A1 1 0 0 0 5 5.1Z" />
+}
+
 export function PlayIcon(props: IconProps) {
   return <Icon {...props} viewBox="0 0 24 24" path="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
 }

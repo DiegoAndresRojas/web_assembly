@@ -1,204 +1,316 @@
 import { useEffect, useState } from 'react'
 
-import { Button } from '@/components/Button'
 import {
   BackIcon,
   CameraTrackIcon,
-  ChevronRightIcon,
+  MoveIcon,
   PauseIcon,
   PlayIcon,
+  RestoreIcon,
+  RotateIcon,
   SkipBackIcon,
+  SkipNextIcon,
 } from '@/components/icons'
-import { resetViewerOrbit, useWorldSession } from '@/hooks/useWorldSession'
-import { placeIn, sequenceOf } from '@/lib/steps'
-import { stageDuration } from '@/lib/timeline'
+import {
+  lookAroundFromCamera,
+  resetViewerOrbit,
+  restoreViewerScene,
+  useWorldSession,
+} from '@/hooks/useWorldSession'
+import { playlistOf, type Scene } from '@/lib/frames'
 import { useStore } from '@/store'
 import { selectCurrentProject } from '@/store/selectors'
 
-/** How far the step's animation has played — its own component, so only
- *  this bar is redrawn on every frame of playback. */
-function Progress({ duration }: { duration: number }) {
-  const playT = useStore((s) => s.playT)
-  const done = duration > 0 ? Math.min(1, playT / duration) : 1
+/** 0:07.4 — minutes, seconds and tenths. */
+function clock(seconds: number): string {
+  const s = Math.max(0, seconds)
+  const whole = Math.floor(s)
+  const tenth = Math.floor((s - whole) * 10)
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}.${tenth}`
+}
+
+/** One animation on the top bar. Its own component — and the one playing
+ *  the only one that reads the playhead — so a frame of playback redraws a
+ *  single bar. */
+function SceneTab({
+  scene,
+  number,
+  state,
+  weight,
+  onOpen,
+}: {
+  scene: Scene
+  number: number
+  state: 'done' | 'on' | 'ahead'
+  weight: number
+  onOpen: () => void
+}) {
+  const playT = useStore((s) => (state === 'on' ? s.playT : 0))
+  const filled =
+    state === 'done'
+      ? 1
+      : state === 'ahead'
+        ? 0
+        : scene.duration > 0
+          ? Math.min(1, playT / scene.duration)
+          : 1
   return (
-    <div className="viewer-progress" role="progressbar" aria-valuenow={Math.round(done * 100)}>
-      <div style={{ width: done * 100 + '%' }} />
+    <button
+      className={'viewer-scene' + (state === 'on' ? ' viewer-scene--on' : '')}
+      style={{ flex: `${weight} 1 0` }}
+      title={`${number}. ${scene.title}`}
+      aria-current={state === 'on' ? 'step' : undefined}
+      onClick={onOpen}
+    >
+      <div className="viewer-scene-bar">
+        <div style={{ width: filled * 100 + '%' }} />
+      </div>
+      <span className="viewer-scene-name">
+        {number}. {scene.title}
+      </span>
+    </button>
+  )
+}
+
+/** The second the open animation is on, to drag along it. */
+function Seek({ duration }: { duration: number }) {
+  const playT = useStore((s) => s.playT)
+  const seekTo = useStore((s) => s.seekTo)
+  const t = Math.min(playT, duration)
+  return (
+    <div className="viewer-seek">
+      <span>{clock(t)}</span>
+      <input
+        type="range"
+        min={0}
+        max={duration || 1}
+        step={0.01}
+        value={t}
+        disabled={duration <= 0}
+        aria-label="Second of this animation"
+        onChange={(e) => seekTo(Number(e.target.value))}
+      />
+      <span className="text-muted">{clock(duration)}</span>
     </div>
   )
 }
 
-/** The assembly as someone follows it: one step at a time, played in the
- *  3D world, with its title and instructions. Nothing here edits the
- *  project. */
+/** A presentation, played: its animations along a bar at the top, the
+ *  open one in the 3D world, and a player's controls at the bottom. The
+ *  pieces can be picked and moved to look at them — nothing done here
+ *  changes the project. */
 export function ViewerView({ stageId }: { stageId: string }) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
   const project = useStore(selectCurrentProject)
+  const frameId = useStore((s) => s.viewerFrame)
   const playing = useStore((s) => s.playing)
   const cameraView = useStore((s) => s.cameraView)
+  const selected = useStore((s) => s.worldSelId)
+  const gizmoMode = useStore((s) => s.gizmoMode)
   const hint = useStore((s) => s.hint)
   const setCameraView = useStore((s) => s.setCameraView)
-  const viewStep = useStore((s) => s.viewStep)
+  const setGizmoMode = useStore((s) => s.setGizmoMode)
+  const selectWorldObject = useStore((s) => s.selectWorldObject)
+  const viewScene = useStore((s) => s.viewScene)
   const closeViewer = useStore((s) => s.closeViewer)
   const onAnimPlay = useStore((s) => s.onAnimPlay)
-  const seekTo = useStore((s) => s.seekTo)
-  // (before the 3D world is made: the first step is seen from the default view)
+  // (before the 3D world is made: the first animation is seen from the
+  // default view)
   useEffect(() => resetViewerOrbit(), [])
   const session = useWorldSession(container, stageId)
 
-  const steps = project ? sequenceOf(project) : []
-  const place = placeIn(steps, stageId)
-  const stage = project?.stages[stageId]
-  const duration = stage?.kind === 'animation' ? stageDuration(stage) : 0
-  const ended = useStore((s) => !s.playing && duration > 0 && s.playT >= duration)
-  const hasCamera = !!stage?.tracks.some((t) => t.targetKind === 'camera')
-  const prevId = place?.prev?.stageId ?? null
-  const nextId = place?.next?.stageId ?? null
+  const { frame, scenes } = project ? playlistOf(project, frameId) : { frame: null, scenes: [] }
+  const index = scenes.findIndex((s) => s.stageId === stageId)
+  const scene = scenes[index] as Scene | undefined
+  const duration = scene?.duration ?? 0
+  const prevId = scenes[index - 1]?.stageId ?? null
+  const nextId = scenes[index + 1]?.stageId ?? null
+  const firstId = scenes[0]?.stageId ?? null
+  const ended = useStore((s) => !s.playing && s.playT >= duration)
+  const hasCamera = !!project?.stages[stageId]?.tracks.some((t) => t.targetKind === 'camera')
+  const through = hasCamera && cameraView
+
+  // like a video: an animation that plays to its end is followed by the next
+  useEffect(() => {
+    if (!nextId) return
+    return useStore.subscribe((s, prev) => {
+      if (prev.playing && !s.playing && s.aid === stageId && s.playT >= duration) viewScene(nextId)
+    })
+  }, [stageId, nextId, duration, viewScene])
+
+  /** Play / pause; at the very end, the whole presentation again. */
+  const play = () => {
+    if (!playing) {
+      // pieces moved by hand go back as it plays: let go of them
+      selectWorldObject(null)
+      if (ended && !nextId && firstId && firstId !== stageId) {
+        viewScene(firstId)
+        return
+      }
+    }
+    onAnimPlay()
+  }
+
+  /** Back to how the animation has it: the pieces where they are at this
+   *  second, seen the way the author framed it. */
+  const restore = () => {
+    restoreViewerScene()
+    if (hasCamera) setCameraView(true)
+    else session?.frameAll()
+  }
 
   useEffect(() => {
-    const replay = () => {
-      seekTo(0)
-      onAnimPlay()
-    }
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key === 'ArrowRight' && nextId) viewStep(nextId)
-      else if (e.key === 'ArrowLeft' && prevId) viewStep(prevId)
+      const state = useStore.getState()
+      if (e.key === 'ArrowRight' && nextId) viewScene(nextId)
+      else if (e.key === 'ArrowLeft' && prevId) viewScene(prevId)
       else if (e.key === ' ') onAnimPlay()
-      else if (e.key.toLowerCase() === 'r') replay()
-      else if (e.key === 'Escape') closeViewer()
-      else return
+      else if (e.key.toLowerCase() === 'r') restoreViewerScene()
+      else if (e.key === 'Escape') {
+        if (state.worldSelId) selectWorldObject(null)
+        else closeViewer()
+      } else return
       e.preventDefault()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [prevId, nextId, viewStep, onAnimPlay, seekTo, closeViewer])
+  }, [prevId, nextId, viewScene, onAnimPlay, closeViewer, selectWorldObject])
 
-  if (!project || !place) return null
+  if (!project || !scene) return null
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <aside className="viewer-steps">
-        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button className="tool-btn" title="Close (Esc)" aria-label="Close" onClick={closeViewer}>
+    <div className="viewer">
+      <div
+        ref={setContainer}
+        className="viewer-stage"
+        // taking hold of the world lets go of the author's camera: it can
+        // be turned, and its pieces picked, from where that camera was
+        onPointerDownCapture={() => {
+          if (through) lookAroundFromCamera()
+        }}
+      />
+
+      <header className="viewer-top">
+        <div className="viewer-title">
+          <button
+            className="viewer-btn"
+            title="Close (Esc)"
+            aria-label="Close"
+            onClick={closeViewer}
+          >
             <BackIcon size={15} />
           </button>
-          <strong
-            title={project.name}
-            style={{
-              minWidth: 0,
-              fontSize: 13,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {project.name}
+          <strong style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {frame ? frame.label : project.name}
           </strong>
+          <span className="text-muted" style={{ flex: 'none' }}>
+            {frame ? `${project.name} · ` : ''}
+            {index + 1} of {scenes.length}
+            {hint ? ` · ${hint}` : ''}
+          </span>
         </div>
-        <ol>
-          {steps.map((step, i) => (
-            <li key={step.id}>
-              <button
-                className={'viewer-step' + (step.stageId === stageId ? ' viewer-step--on' : '')}
-                aria-current={step.stageId === stageId ? 'step' : undefined}
-                onClick={() => viewStep(step.stageId)}
-              >
-                <span className="viewer-step-n">{i + 1}</span>
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {step.title}
-                </span>
-              </button>
-            </li>
+        <nav className="viewer-scenes" aria-label="Animations of this presentation">
+          {scenes.map((s, i) => (
+            <SceneTab
+              key={s.stageId}
+              scene={s}
+              number={i + 1}
+              state={i < index ? 'done' : i === index ? 'on' : 'ahead'}
+              // as wide as it is long — one with nothing to play still shows
+              weight={Math.max(s.duration, 1)}
+              onOpen={() => viewScene(s.stageId)}
+            />
           ))}
-        </ol>
-      </aside>
+        </nav>
+      </header>
 
-      <main style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        <div ref={setContainer} style={{ position: 'absolute', inset: 0 }} />
+      <footer className="viewer-bottom">
+        <Seek duration={duration} />
+        <div className="viewer-controls">
+          <button
+            className="viewer-btn"
+            title="Previous animation (←)"
+            aria-label="Previous animation"
+            disabled={!prevId}
+            onClick={() => prevId && viewScene(prevId)}
+          >
+            <SkipBackIcon size={16} />
+          </button>
+          <button
+            className="viewer-btn viewer-btn--main"
+            title={playing ? 'Pause (Space)' : 'Play (Space)'}
+            aria-label={playing ? 'Pause' : 'Play'}
+            disabled={duration <= 0 && !(ended && !nextId && firstId !== stageId)}
+            onClick={play}
+          >
+            {playing ? <PauseIcon size={17} /> : <PlayIcon size={17} />}
+          </button>
+          <button
+            className="viewer-btn"
+            title="Next animation (→)"
+            aria-label="Next animation"
+            disabled={!nextId}
+            onClick={() => nextId && viewScene(nextId)}
+          >
+            <SkipNextIcon size={16} />
+          </button>
+          <button
+            className="viewer-btn"
+            title="Put every piece back where this animation has it at this second (R)"
+            onClick={restore}
+          >
+            <RestoreIcon size={16} /> Reset
+          </button>
 
-        <div
-          style={{
-            position: 'absolute',
-            top: 'var(--space-4)',
-            right: 'var(--space-4)',
-            display: 'flex',
-            gap: 'var(--space-2)',
-          }}
-        >
+          <span style={{ flex: 1 }} />
+
+          {selected ? (
+            <>
+              <button
+                className={'viewer-btn' + (gizmoMode === 'translate' ? ' viewer-btn--on' : '')}
+                title="Move the piece you picked"
+                onClick={() => setGizmoMode('translate')}
+              >
+                <MoveIcon size={15} /> Move
+              </button>
+              <button
+                className={'viewer-btn' + (gizmoMode === 'rotate' ? ' viewer-btn--on' : '')}
+                title="Turn the piece you picked"
+                onClick={() => setGizmoMode('rotate')}
+              >
+                <RotateIcon size={15} /> Turn
+              </button>
+            </>
+          ) : (
+            <span className="text-muted" style={{ fontSize: 11 }}>
+              {through ? 'Drag to look around' : 'Click a piece to move it'}
+            </span>
+          )}
           {hasCamera && (
-            <Button
-              variant="secondary"
-              className={cameraView ? 'btn--on' : ''}
+            <button
+              className={'viewer-btn' + (through ? ' viewer-btn--on' : '')}
               title={
-                cameraView
+                through
                   ? 'Showing the shot the author chose — click to look around freely'
                   : 'Look through the camera the author placed'
               }
-              onClick={() => setCameraView(!cameraView)}
+              onClick={() => (through ? lookAroundFromCamera() : setCameraView(true))}
             >
-              <CameraTrackIcon size={13} /> {cameraView ? 'Author’s view' : 'Free view'}
-            </Button>
+              <CameraTrackIcon size={14} /> Author’s view
+            </button>
           )}
-          {!(hasCamera && cameraView) && (
-            <Button
-              variant="secondary"
+          {!through && (
+            <button
+              className="viewer-btn"
               title="Fit everything in view"
               onClick={() => session?.frameAll()}
             >
               Frame all
-            </Button>
+            </button>
           )}
         </div>
-
-        <section className="viewer-card" aria-live="polite">
-          {duration > 0 && <Progress duration={duration} />}
-          <div className="text-muted" style={{ fontSize: 11 }}>
-            Step {place.number} of {place.total}
-            {hint ? ` · ${hint}` : ''}
-          </div>
-          <h2 style={{ margin: '2px 0 0', fontSize: 17 }}>{place.step.title}</h2>
-          {place.step.instructions && (
-            <p style={{ margin: 'var(--space-2) 0 0', fontSize: 13, whiteSpace: 'pre-wrap' }}>
-              {place.step.instructions}
-            </p>
-          )}
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-            <Button
-              variant="secondary"
-              disabled={!prevId}
-              title="Previous step (←)"
-              onClick={() => prevId && viewStep(prevId)}
-            >
-              <ChevronRightIcon size={11} style={{ transform: 'rotate(180deg)' }} /> Previous
-            </Button>
-            {duration > 0 && (
-              <Button
-                variant="secondary"
-                title={playing ? 'Pause (Space)' : ended ? 'Play again (R)' : 'Play (Space)'}
-                onClick={onAnimPlay}
-              >
-                {playing ? (
-                  <PauseIcon size={12} />
-                ) : ended ? (
-                  <SkipBackIcon size={12} />
-                ) : (
-                  <PlayIcon size={12} />
-                )}
-                {playing ? 'Pause' : ended ? 'Replay' : 'Play'}
-              </Button>
-            )}
-            <div style={{ flex: 1 }} />
-            <Button
-              variant="primary"
-              disabled={!nextId}
-              title={nextId ? 'Next step (→)' : 'This is the last step'}
-              onClick={() => nextId && viewStep(nextId)}
-            >
-              {nextId ? 'Next' : 'Done'} <ChevronRightIcon size={11} />
-            </Button>
-          </div>
-        </section>
-      </main>
+      </footer>
     </div>
   )
 }

@@ -11,7 +11,7 @@ describe('normalizeProject', () => {
   it('fills in a usable project from an empty save', () => {
     const p = normalizeProject({})
     expect(p).toMatchObject({ name: 'Project', meshes: [], stages: {} })
-    expect(p?.board).toEqual({ nodes: [], edges: [] })
+    expect(p?.board).toEqual({ nodes: [], edges: [], frames: [] })
   })
 
   it('creates the stage record of every stage node', () => {

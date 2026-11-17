@@ -167,9 +167,25 @@ Comprobación manual:
 - Renombrar, duplicar y borrar un proyecto desde su tarjeta; soltar un `.meshstudio` sobre la página.
 - En el tablero: soltar un STL desde el explorador, Supr, Esc, rueda del ratón y "Fit".
 
+### Presentaciones como marcos del tablero (rama `feat/presentation-frame`, sobre la anterior) — pendiente de comprobar a mano
+
+Sustituye a la lista de pasos del lateral (H2/H3). Esquema 19: `board.frames`; `project.steps` desaparece (títulos e instrucciones de los pasos se pierden al migrar).
+
+- **Marco de presentación:** un rectángulo sobre el tablero (herramienta de la barra, o la ficha "Presentation" arrastrada). Las animaciones cuyo nodo queda dentro son las que reproduce, de izquierda a derecha; se iluminan y muestran su número de orden. No guarda lista: manda la posición de los nodos (`lib/frames.ts`).
+- El marco se mueve por su franja superior (llevándose los nodos de dentro), se redimensiona por las esquinas, se renombra y se borra (Supr). Su botón ▶ abre el visor con esa presentación.
+- **Visor nuevo:** sin lateral. Arriba, las animaciones como tramos de una barra que se va llenando (clic para saltar); abajo, controles de vídeo: anterior, reproducir/pausa, siguiente, restablecer, y la línea de tiempo en segundos de la animación abierta. Al terminar una animación sigue la siguiente.
+- **Interacción en el visor:** arrastrar la escena suelta la cámara del autor y deja orbitar; un clic en una pieza la selecciona (pausa) y se puede mover o girar. Nada de esto se guarda. "Reset" devuelve las piezas a donde la animación las tiene en ese segundo y vuelve a la vista del autor.
+- "View" en la tarjeta de proyecto reproduce el primer marco con animaciones; sin marcos, todas las animaciones en el orden de la cadena.
+
+Comprobación manual:
+
+- Dibujar un marco, arrastrar animaciones dentro y fuera (brillo y número), moverlo, redimensionarlo, deshacer.
+- ▶ del marco: la barra superior avanza y pasa sola a la siguiente animación; saltar con clic; arrastrar la línea de tiempo inferior.
+- En el visor: mover una pieza, "Reset", y reproducir de nuevo.
+
 ### Pendiente de estas ramas
 
-- Fusionar `feat/projects-and-board-ux` en `main` cuando esté comprobada.
+- Fusionar `feat/projects-and-board-ux` y `feat/presentation-frame` en `main` cuando estén comprobadas.
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes

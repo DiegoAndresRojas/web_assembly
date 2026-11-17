@@ -363,7 +363,7 @@ export class WorldSession {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y)
       down = null
       // looking through the animation camera is a preview, not a place to pick
-      if (moved > CLICK_SLOP || this.locked || this.presenting || this.viewingThrough()) return
+      if (moved > CLICK_SLOP || this.locked || this.viewingThrough()) return
       // A click is not an orbit: OrbitControls still turned the camera by
       // the few pixels of hand jitter (and damping would keep drifting it),
       // so put the view back exactly where it was.
@@ -790,13 +790,12 @@ export class WorldSession {
     this.hoverDirty = true
   }
 
-  /** Shows the world to someone who only watches: no grid, no camera or
-   *  light bodies, nothing to pick. */
+  /** Shows the world to someone it is presented to: no grid, no camera
+   *  or light bodies. The pieces can still be picked and moved. */
   setPresenting(on: boolean): void {
     this.presenting = on
     if (this.grid) this.grid.visible = !on
     if (this.animRig) this.animRig.visual.visible = !on && !this.lookThrough
-    if (on) this.gizmo?.detach()
     this.hoverDirty = true
   }
 

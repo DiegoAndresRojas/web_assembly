@@ -35,18 +35,16 @@ describe('undo on the board', () => {
     expect(project().stages[id]?.kind).toBe('assembly')
   })
 
-  it('brings a deleted stage back with its place in the steps', () => {
+  it('brings a deleted stage back', () => {
     const s = useStore.getState()
     s.dropStageOnBoard('assembly', 0, 0)
     s.dropStageOnBoard('animation', 100, 0)
-    s.addEveryStep()
-    const [asm, anim] = project().steps.map((x) => x.stageId)
-    expect(stageIds().sort()).toEqual([asm, anim].sort())
+    const [asm, anim] = stageIds()
 
     s.deleteNode(asm)
-    expect(project().steps.map((x) => x.stageId)).toEqual([anim])
+    expect(stageIds()).toEqual([anim])
     s.boardUndo()
-    expect(project().steps.map((x) => x.stageId)).toEqual([asm, anim])
+    expect(stageIds()).toEqual([asm, anim])
     expect(project().stages[asm]).toBeDefined()
   })
 
@@ -78,23 +76,30 @@ describe('undo on the board', () => {
     expect(stageIds()).toEqual([id])
   })
 
-  it('edits steps: title, instructions, order — each undoable', () => {
+  it('takes back a frame: drawn, renamed, dragged, deleted', () => {
     const s = useStore.getState()
-    s.dropStageOnBoard('assembly', 0, 0)
-    s.dropStageOnBoard('animation', 100, 0)
-    s.addEveryStep()
-    const [first, second] = project().steps
-    s.updateStep(first.id, { title: '  Fit the gear ', instructions: 'Push until it clicks' })
-    s.updateStep(first.id, { title: '   ' })
-    expect(project().steps[0]).toMatchObject({
-      title: 'Fit the gear',
-      instructions: 'Push until it clicks',
-    })
-    s.moveStep(second.id, -1)
-    expect(project().steps.map((x) => x.id)).toEqual([second.id, first.id])
+    const frames = () => project().board.frames
+    s.addFrame({ x: 0, y: 0, w: 400, h: 300 })
+    const id = frames()[0].id
+    expect(useStore.getState().selFrame).toBe(id)
+    s.renameFrame(id, '  How it goes together ')
+    s.renameFrame(id, '   ')
+    expect(frames()[0].label).toBe('How it goes together')
+
+    s.pushBoardHistory()
+    s.moveFrame(id, 40, 40)
+    s.moveFrame(id, 90, 90)
     s.boardUndo()
-    expect(project().steps.map((x) => x.id)).toEqual([first.id, second.id])
+    expect(frames()[0]).toMatchObject({ x: 0, y: 0 })
+
+    s.deleteFrame(id)
+    expect(frames()).toEqual([])
+    expect(useStore.getState().selFrame).toBeNull()
     s.boardUndo()
-    expect(project().steps[0].instructions).toBe('')
+    expect(frames()[0].label).toBe('How it goes together')
+    s.boardUndo()
+    expect(frames()[0].label).toBe('Presentation 1')
+    s.boardUndo()
+    expect(frames()).toEqual([])
   })
 })

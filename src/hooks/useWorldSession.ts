@@ -37,13 +37,37 @@ import type { MembersRow, Pose, Project, StageMember } from '@/types/project'
 
 let currentSession: WorldSession | null = null
 
-/** Where the viewer was looking from, carried from one step to the next
- *  (the steps of an assembly share one world). */
+/** Where the viewer was looking from, carried from one animation to the
+ *  next (the animations of a presentation share one world). */
 let viewerOrbit: OrbitView | null = null
 
-/** Starts the viewer's next step from the default view. */
+/** Starts the viewer's next animation from the default view. */
 export function resetViewerOrbit(): void {
   viewerOrbit = null
+}
+
+/** The viewer, looking through the author's camera, lets go of it: the
+ *  free view takes over from right where that camera is, so the picture
+ *  does not jump — and from then on the world can be turned and its
+ *  pieces picked. */
+export function lookAroundFromCamera(): void {
+  const session = currentSession
+  const state = useStore.getState()
+  if (!session || !state.cameraView) return
+  const pose = session.getAnimCameraPose()
+  if (pose) session.adoptView(pose)
+  // (now, not when React gets to it: the press that asked for this is
+  // already the start of an orbit)
+  session.setLookThrough(false)
+  state.setCameraView(false)
+}
+
+/** Puts every piece back where the open animation has it at the second
+ *  the playhead is on — undoing whatever was moved by hand in the viewer. */
+export function restoreViewerScene(): void {
+  const state = useStore.getState()
+  state.selectWorldObject(null)
+  if (currentSession) showAnimateFrame(currentSession, state.playT)
 }
 
 function onPick(hit: PickHit | null): void {
@@ -54,6 +78,13 @@ function onPick(hit: PickHit | null): void {
   }
   if (state.wmode === 'assembly' && state.kpOn) {
     state.pickPoint(hit)
+    return
+  }
+  // presented: the very piece that was clicked is taken hold of, and the
+  // animation waits while it is handled
+  if (state.view === 'viewer') {
+    if (state.playing) state.onAnimPlay()
+    state.selectWorldObject(hit.nodeId)
     return
   }
   // animating: a locked assembly is picked as one thing, whatever piece of
@@ -71,6 +102,8 @@ function onPick(hit: PickHit | null): void {
  *  for a light that is not on the timeline: it simply is where it is put. */
 function onObjectMoved(nodeId: string, pose: Pose): void {
   const state = useStore.getState()
+  // (nothing moved in the viewer is kept)
+  if (state.view === 'viewer') return
   if (state.wmode === 'assembly') {
     state.setMemberPose(nodeId, pose)
     return
@@ -330,8 +363,8 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       companionsOf,
     })
     keepParsedMeshes(selectCurrentProject(useStore.getState())?.meshes ?? [])
-    // someone following the assembly only watches; they keep looking from
-    // where they were. An author looks from where the stage was left.
+    // someone a presentation is shown to keeps looking from where they
+    // were. An author looks from where the stage was left.
     const viewing = useStore.getState().view === 'viewer'
     created.setPresenting(viewing)
     const left = viewing

@@ -1,6 +1,6 @@
 import { Button } from '@/components/Button'
 import { IconButton } from '@/components/IconButton'
-import { MoveIcon, SelectIcon, UndoIcon } from '@/components/icons'
+import { FrameIcon, MoveIcon, SelectIcon, UndoIcon } from '@/components/icons'
 import { useStore } from '@/store'
 
 function ZoomOutIcon() {
@@ -50,6 +50,14 @@ export function BoardToolSwitcher() {
       </IconButton>
       <IconButton size="md" active={tool === 'pan'} title="Pan" onClick={() => setTool('pan')}>
         <MoveIcon size={17} />
+      </IconButton>
+      <IconButton
+        size="md"
+        active={tool === 'frame'}
+        title="Presentation: drag a rectangle around the animations to play"
+        onClick={() => setTool(tool === 'frame' ? 'select' : 'frame')}
+      >
+        <FrameIcon size={17} />
       </IconButton>
       <div style={{ height: 1, margin: '2px 3px', background: 'var(--color-divider)' }} />
       <IconButton size="md" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}>

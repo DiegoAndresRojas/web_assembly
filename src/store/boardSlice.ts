@@ -1,5 +1,15 @@
-import { MESH_H, MESH_W, NODE_W, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '@/lib/constants'
+import {
+  FRAME_MIN_H,
+  FRAME_MIN_W,
+  MESH_H,
+  MESH_W,
+  NODE_W,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_STEP,
+} from '@/lib/constants'
 import { duplicateNode } from '@/lib/duplicate'
+import { addFrame, nodesInFrame } from '@/lib/frames'
 import { edgeFor } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
@@ -23,11 +33,11 @@ export const initialBoardState: BoardState = {
   hover: null,
   selId: null,
   selEdge: null,
+  selFrame: null,
   linking: null,
   meshFilterExt: null,
   boardFit: false,
-  hoverAssembly: false,
-  hoverAnimation: false,
+  paletteHover: null,
 }
 
 /** An assembly was just wired into an animation: its pieces start where
@@ -100,13 +110,18 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     fitBoard(width, height) {
       set((state) => {
         state.boardFit = false
-        const nodes = findProject(state, state.pid)?.board.nodes ?? []
-        if (!nodes.length || width <= 0 || height <= 0) {
+        const board = findProject(state, state.pid)?.board
+        const nodes = board?.nodes ?? []
+        const frames = board?.frames ?? []
+        if (!(nodes.length + frames.length) || width <= 0 || height <= 0) {
           state.pan = { x: 60, y: 60 }
           state.zoom = 1
           return
         }
-        const boxes = nodes.map((n) => nodeBox(n.kind, n.x, n.y))
+        const boxes = [
+          ...nodes.map((n) => nodeBox(n.kind, n.x, n.y)),
+          ...frames.map((f) => ({ left: f.x, top: f.y, right: f.x + f.w, bottom: f.y + f.h })),
+        ]
         const left = Math.min(...boxes.map((b) => b.left))
         const right = Math.max(...boxes.map((b) => b.right))
         const top = Math.min(...boxes.map((b) => b.top))
@@ -205,6 +220,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       set((state) => {
         state.selId = nodeId
         state.selEdge = null
+        state.selFrame = null
       })
     },
     hoverNode(nodeId) {
@@ -239,7 +255,6 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
           (e) => e.from !== nodeId && e.to !== nodeId,
         )
         if (node && node.kind !== 'mesh') delete project.stages[nodeId]
-        project.steps = project.steps.filter((s) => s.stageId !== nodeId)
         // meshes and upstream assemblies are both stage inputs — whatever
         // any stage held about the deleted node goes with its edges
         reconcileProject(project)
@@ -295,6 +310,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
       set((state) => {
         state.selEdge = edgeId
         state.selId = null
+        state.selFrame = null
       })
     },
     removeEdge(edgeId) {
@@ -327,8 +343,67 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     },
     setPaletteHover(which) {
       set((state) => {
-        state.hoverAssembly = which === 'assembly'
-        state.hoverAnimation = which === 'animation'
+        state.paletteHover = which
+      })
+    },
+
+    addFrame(rect) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        if (!project) return
+        state.selFrame = addFrame(project, rect).id
+        state.selId = null
+        state.selEdge = null
+      })
+    },
+    selectFrame(frameId) {
+      set((state) => {
+        state.selFrame = frameId
+        if (frameId) {
+          state.selId = null
+          state.selEdge = null
+        }
+      })
+    },
+    moveFrame(frameId, x, y) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        const frame = project?.board.frames.find((f) => f.id === frameId)
+        if (!project || !frame) return
+        const dx = x - frame.x
+        const dy = y - frame.y
+        if (!dx && !dy) return
+        // what stands in it goes with it
+        for (const node of nodesInFrame(project, frame)) {
+          node.x += dx
+          node.y += dy
+        }
+        frame.x = x
+        frame.y = y
+      })
+    },
+    resizeFrame(frameId, rect) {
+      set((state) => {
+        const frame = findProject(state, state.pid)?.board.frames.find((f) => f.id === frameId)
+        if (!frame) return
+        frame.x = rect.x
+        frame.y = rect.y
+        frame.w = Math.max(FRAME_MIN_W, rect.w)
+        frame.h = Math.max(FRAME_MIN_H, rect.h)
+      })
+    },
+    renameFrame(frameId, label) {
+      set((state) => {
+        const frame = findProject(state, state.pid)?.board.frames.find((f) => f.id === frameId)
+        if (frame && label.trim()) frame.label = label.trim()
+      })
+    },
+    deleteFrame(frameId) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        if (!project || !project.board.frames.some((f) => f.id === frameId)) return
+        project.board.frames = project.board.frames.filter((f) => f.id !== frameId)
+        if (state.selFrame === frameId) state.selFrame = null
       })
     },
   }
@@ -358,5 +433,8 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     completeLinking: recorded(actions.completeLinking),
     removeEdge: recorded(actions.removeEdge),
     deleteSelectedEdge: recorded(actions.deleteSelectedEdge),
+    addFrame: recorded(actions.addFrame),
+    renameFrame: recorded(actions.renameFrame),
+    deleteFrame: recorded(actions.deleteFrame),
   }
 }

@@ -1,16 +1,29 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
+  useState,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 
+import { FRAME_MIN_H, FRAME_MIN_W } from '@/lib/constants'
+import {
+  frameAnimations,
+  frameAround,
+  framedPlaces,
+  rectFrom,
+  resizeRect,
+  type Corner,
+  type Rect,
+} from '@/lib/frames'
 import { useStore } from '@/store'
 import type { NodeKind, Project } from '@/types/project'
 import { BoardNode } from './BoardNode'
 import { EdgeLayer } from './EdgeLayer'
+import { FrameBox } from './FrameBox'
 import { BoardToolSwitcher, BoardZoomControls } from './Toolbar'
 
 export interface BoardCanvasProps {
@@ -27,10 +40,25 @@ interface DragAnchor {
   moved: boolean
 }
 
+/** A frame being dragged by its top strip, or resized by a corner. */
+interface FrameDrag {
+  frameId: string
+  corner: Corner | null
+  start: Rect
+  px: number
+  py: number
+  moved: boolean
+}
+
 export function BoardCanvas({ project }: BoardCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const panStartRef = useRef<{ x: number; y: number; pan: { x: number; y: number } } | null>(null)
   const dragRef = useRef<DragAnchor | null>(null)
+  const frameDragRef = useRef<FrameDrag | null>(null)
+  /** A frame being drawn with the frame tool: where it started, and the
+   *  rectangle so far. */
+  const drawRef = useRef<{ x: number; y: number } | null>(null)
+  const [drawing, setDrawing] = useState<Rect | null>(null)
 
   const pan = useStore((s) => s.pan)
   const zoom = useStore((s) => s.zoom)
@@ -59,6 +87,19 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const zoomAt = useStore((s) => s.zoomAt)
   const fitBoard = useStore((s) => s.fitBoard)
   const importMeshFiles = useStore((s) => s.importMeshFiles)
+  const tool = useStore((s) => s.tool)
+  const setTool = useStore((s) => s.setTool)
+  const selFrame = useStore((s) => s.selFrame)
+  const addFrame = useStore((s) => s.addFrame)
+  const selectFrame = useStore((s) => s.selectFrame)
+  const moveFrame = useStore((s) => s.moveFrame)
+  const resizeFrame = useStore((s) => s.resizeFrame)
+  const renameFrame = useStore((s) => s.renameFrame)
+  const deleteFrame = useStore((s) => s.deleteFrame)
+  const openViewer = useStore((s) => s.openViewer)
+
+  // which animations stand in a frame, and in what order they play
+  const places = useMemo(() => framedPlaces(project), [project])
 
   const fit = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect()
@@ -86,12 +127,35 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
       return
     }
     selectNode(null)
+    if (effectiveTool() === 'frame') {
+      const p = pointFromEvent(e.clientX, e.clientY)
+      drawRef.current = p
+      setDrawing({ x: p.x, y: p.y, w: 0, h: 0 })
+    }
   }
   const handleBoardMove = (e: ReactPointerEvent) => {
     if (panStartRef.current) {
       const dx = e.clientX - panStartRef.current.x
       const dy = e.clientY - panStartRef.current.y
       setPan(panStartRef.current.pan.x + dx, panStartRef.current.pan.y + dy)
+      return
+    }
+    if (drawRef.current) {
+      const p = pointFromEvent(e.clientX, e.clientY)
+      setDrawing(rectFrom(drawRef.current.x, drawRef.current.y, p.x, p.y))
+      return
+    }
+    if (frameDragRef.current) {
+      const drag = frameDragRef.current
+      const p = pointFromEvent(e.clientX, e.clientY)
+      const dx = p.x - drag.px
+      const dy = p.y - drag.py
+      if (!drag.moved && Math.hypot(dx, dy) < 2) return
+      // (one thing to undo, like a node's drag)
+      if (!drag.moved) pushBoardHistory()
+      drag.moved = true
+      if (drag.corner) resizeFrame(drag.frameId, resizeRect(drag.start, drag.corner, dx, dy))
+      else moveFrame(drag.frameId, drag.start.x + dx, drag.start.y + dy)
       return
     }
     if (dragRef.current) {
@@ -114,6 +178,17 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const handleBoardUp = (e: ReactPointerEvent) => {
     panStartRef.current = null
     dragRef.current = null
+    frameDragRef.current = null
+    if (drawRef.current) {
+      const p = pointFromEvent(e.clientX, e.clientY)
+      const rect = rectFrom(drawRef.current.x, drawRef.current.y, p.x, p.y)
+      drawRef.current = null
+      setDrawing(null)
+      // a click (or a rectangle too small to be one) gives the usual size
+      addFrame(rect.w < FRAME_MIN_W / 2 || rect.h < FRAME_MIN_H / 2 ? frameAround(p.x, p.y) : rect)
+      setTool('select')
+      return
+    }
     if (linking) {
       const p = pointFromEvent(e.clientX, e.clientY)
       completeLinking(p.x, p.y)
@@ -138,8 +213,9 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
       return
     }
     const meshId = e.dataTransfer.getData('text/ms-mesh-id')
-    const kind = e.dataTransfer.getData('text/ms-node-kind') as NodeKind | ''
+    const kind = e.dataTransfer.getData('text/ms-node-kind') as NodeKind | 'frame' | ''
     if (meshId) dropMeshOnBoard(meshId, p.x, p.y)
+    else if (kind === 'frame') addFrame(frameAround(p.x, p.y))
     else if (kind && kind !== 'mesh') dropStageOnBoard(kind, p.x, p.y)
   }
 
@@ -154,6 +230,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
         background: 'var(--color-bg)',
         backgroundImage: 'radial-gradient(var(--color-neutral-800) 1px, transparent 1px)',
         backgroundSize: '22px 22px',
+        cursor: tool === 'frame' ? 'crosshair' : undefined,
       }}
       onPointerDown={handleBoardDown}
       onPointerMove={handleBoardMove}
@@ -171,6 +248,49 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
           transformOrigin: '0 0',
         }}
       >
+        {project.board.frames.map((frame) => (
+          <FrameBox
+            key={frame.id}
+            frame={frame}
+            count={frameAnimations(project, frame).length}
+            selected={selFrame === frame.id}
+            onGrab={(e) => {
+              e.stopPropagation()
+              selectFrame(frame.id)
+              if (effectiveTool() === 'pan') return
+              const p = pointFromEvent(e.clientX, e.clientY)
+              frameDragRef.current = {
+                frameId: frame.id,
+                corner: null,
+                start: { x: frame.x, y: frame.y, w: frame.w, h: frame.h },
+                px: p.x,
+                py: p.y,
+                moved: false,
+              }
+            }}
+            onResizeStart={(corner, e) => {
+              e.stopPropagation()
+              const p = pointFromEvent(e.clientX, e.clientY)
+              frameDragRef.current = {
+                frameId: frame.id,
+                corner,
+                start: { x: frame.x, y: frame.y, w: frame.w, h: frame.h },
+                px: p.x,
+                py: p.y,
+                moved: false,
+              }
+            }}
+            onPlay={() => openViewer(project.id, 'board', frame.id)}
+            onRename={(name) => renameFrame(frame.id, name)}
+            onDelete={() => deleteFrame(frame.id)}
+          />
+        ))}
+        {drawing && (
+          <div
+            className="board-frame board-frame--drawing"
+            style={{ left: drawing.x, top: drawing.y, width: drawing.w, height: drawing.h }}
+          />
+        )}
         <EdgeLayer project={project} />
         {project.board.nodes.map((node) => (
           <BoardNode
@@ -183,6 +303,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             }
             selected={selId === node.id}
             hovered={hover === node.id}
+            framed={places.get(node.id) ?? null}
             onPointerDown={(e) => {
               e.stopPropagation()
               selectNode(node.id)
@@ -237,7 +358,7 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
 
       <BoardToolSwitcher />
       <BoardZoomControls onFit={fit} />
-      {project.board.nodes.length === 0 && (
+      {project.board.nodes.length + project.board.frames.length === 0 && (
         <div
           className="text-muted"
           style={{

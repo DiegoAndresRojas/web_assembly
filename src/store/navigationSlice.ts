@@ -3,7 +3,7 @@ import type { Draft } from 'immer'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import { PART_SEP } from '@/lib/graph'
 import { isLightKey, lightForKey } from '@/lib/lights'
-import { sequenceOf } from '@/lib/steps'
+import { playlistOf } from '@/lib/frames'
 import { stageDuration } from '@/lib/timeline'
 import type { AppState, Get, NavigationActions, NavigationState, Set, StageView } from './types'
 import type { Stage, WorldMode } from '@/types/project'
@@ -14,6 +14,7 @@ export const initialNavigationState: NavigationState = {
   aid: null,
   wmode: 'assembly',
   viewerFrom: 'projects',
+  viewerFrame: null,
   stageViews: {},
 }
 
@@ -72,6 +73,7 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.boardFit = true
         state.selId = null
         state.selEdge = null
+        state.selFrame = null
       })
       get().clearBoardHistory()
     },
@@ -121,11 +123,16 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
       })
     },
 
-    openViewer(pid, from) {
+    openViewer(pid, from, frameId) {
       const project = get().projects.find((p) => p.id === pid)
-      const first = project && sequenceOf(project)[0]
+      const first = project && playlistOf(project, frameId ?? null).scenes[0]
       if (!first) {
-        get().notify('Nothing to play yet: add steps on the board, or an animation.', 'info')
+        get().notify(
+          frameId
+            ? 'Nothing to play yet: put an animation inside the frame.'
+            : 'Nothing to play yet: this project has no animations.',
+          'info',
+        )
         return
       }
       set((state) => {
@@ -133,19 +140,23 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.pid = pid
         state.view = 'viewer'
         state.viewerFrom = from
+        state.viewerFrame = frameId ?? null
         state.cameraView = true
+        state.gizmoMode = 'translate'
       })
       get().clearBoardHistory()
-      get().viewStep(first.stageId)
+      get().viewScene(first.stageId)
     },
 
-    viewStep(stageId) {
+    viewScene(stageId) {
       const { pid, projects } = get()
       const node = projects.find((p) => p.id === pid)?.board.nodes.find((n) => n.id === stageId)
       if (!node || node.kind === 'mesh') return
       set((state) => {
         state.aid = stageId
         state.wmode = wmodeForKind(node.kind)
+        // each animation is first seen the way its author framed it
+        state.cameraView = true
         state.kpOn = false
         state.pendingPicks = []
         state.asmOpen = []

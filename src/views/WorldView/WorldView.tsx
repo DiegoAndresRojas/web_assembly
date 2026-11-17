@@ -1,11 +1,10 @@
 import { useCallback, useState } from 'react'
 
-import { BackIcon, ChevronRightIcon } from '@/components/icons'
+import { BackIcon } from '@/components/icons'
 import { IconButton } from '@/components/IconButton'
 import { NameField } from '@/components/NameField'
 import { useShortcuts } from '@/hooks/useShortcuts'
 import { stageName } from '@/lib/cameras'
-import { stepPlace } from '@/lib/steps'
 import type { WorldSession } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import { TimelineDock } from '@/views/TimelineView/TimelineDock'
@@ -25,7 +24,6 @@ export function WorldView({ stageId }: { stageId: string }) {
   const wmode = useStore((s) => s.wmode)
   const backToBoard = useStore((s) => s.backToBoard)
   const renameNode = useStore((s) => s.renameNode)
-  const openStage = useStore((s) => s.openStage)
 
   const onSession = useCallback((s: WorldSession | null) => setSession(s), [])
   useShortcuts(session)
@@ -33,8 +31,6 @@ export function WorldView({ stageId }: { stageId: string }) {
   if (!project || !node) return null
   const stage = project.stages[stageId]
   if (!stage) return null
-  // where this stage stands in the assembly sequence, if it is a step
-  const place = stepPlace(project, stageId)
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -82,34 +78,6 @@ export function WorldView({ stageId }: { stageId: string }) {
               onRename={(name) => renameNode(stageId, name)}
               style={{ flex: 1, fontSize: 12 }}
             />
-            {place && (
-              <span
-                title={`Step ${place.number} of ${place.total}: ${place.step.title}`}
-                style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 1 }}
-              >
-                <IconButton
-                  title={
-                    place.prev ? `Previous step: ${place.prev.title}` : 'This is the first step'
-                  }
-                  aria-label="Previous step"
-                  disabled={!place.prev}
-                  onClick={() => place.prev && openStage(place.prev.stageId)}
-                >
-                  <ChevronRightIcon size={11} style={{ transform: 'rotate(180deg)' }} />
-                </IconButton>
-                <span className="text-muted" style={{ fontSize: 10 }}>
-                  {place.number}/{place.total}
-                </span>
-                <IconButton
-                  title={place.next ? `Next step: ${place.next.title}` : 'This is the last step'}
-                  aria-label="Next step"
-                  disabled={!place.next}
-                  onClick={() => place.next && openStage(place.next.stageId)}
-                >
-                  <ChevronRightIcon size={11} />
-                </IconButton>
-              </span>
-            )}
           </div>
 
           {wmode === 'animate' && (

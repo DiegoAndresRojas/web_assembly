@@ -1,12 +1,14 @@
 // Schema versioning + defensive normalization for the persisted payload.
 // Typed port of only_js/src/store/migrations.js — the store's Zustand
 // `persist` middleware calls `run()` as its `migrate` function.
+import { FRAME_H, FRAME_MIN_H, FRAME_MIN_W, FRAME_W } from './constants'
 import { reconcileProject } from './stageInputs'
 import { clamp, num, uid } from './utils'
 import { DEFAULT_FRAME_FORMAT, isFrameFormat } from './videoFormat'
 import type {
   Board,
   BoardEdge,
+  BoardFrame,
   BoardNode,
   Ease,
   EnvironmentPreset,
@@ -23,7 +25,6 @@ import type {
   StageFloor,
   StageLight,
   StageMember,
-  Step,
   TimelineAction,
   Track,
   Vec3,
@@ -54,9 +55,11 @@ import type {
 //     are brought in line with them; fields nothing used are gone (union,
 //     camera.tracked, mesh origin / color, member color, 'pending' links).
 // 18: projects know when they were made and last changed.
+// 19: presentations are frames drawn on the board around the animations
+//     they play (board.frames); the list of steps is gone.
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 18
+export const CURRENT_VERSION = 19
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -332,8 +335,12 @@ export function normalizeProject(raw: unknown): Project | null {
     : []
   const nodeIds = new Set(nodes.map((n) => n.id))
   const animationIds = new Set(nodes.filter((n) => n.kind === 'animation').map((n) => n.id))
+  const frames = Array.isArray(boardRaw.frames)
+    ? boardRaw.frames.map(normalizeFrame).filter((f): f is BoardFrame => !!f)
+    : []
   const board: Board = {
     nodes,
+    frames,
     // edges of nodes that no longer exist (e.g. removed node kinds) go too,
     // and so does anything coming out of an animation: it only takes inputs
     edges: edges.filter(
@@ -376,7 +383,6 @@ export function normalizeProject(raw: unknown): Project | null {
     meshes,
     board,
     stages,
-    steps: normalizeSteps(p.steps, nodes),
   }
   // what a stage holds about its inputs follows the board's edges: a row
   // for each input, nothing about a piece that is not wired in any more
@@ -384,23 +390,17 @@ export function normalizeProject(raw: unknown): Project | null {
   return project
 }
 
-/** The steps whose stage is still on the board, each stage once. */
-function normalizeSteps(raw: unknown, nodes: BoardNode[]): Step[] {
-  const steps: Step[] = []
-  for (const item of Array.isArray(raw) ? raw : []) {
-    if (!item || typeof item !== 'object') continue
-    const s = item as Record<string, unknown>
-    const node = nodes.find((n) => n.id === s.stageId && n.kind !== 'mesh')
-    if (!node || steps.some((step) => step.stageId === node.id)) continue
-    const fallback = node.label?.trim() || node.kind[0].toUpperCase() + node.kind.slice(1)
-    steps.push({
-      id: typeof s.id === 'string' && s.id ? s.id : uid(),
-      stageId: node.id,
-      title: typeof s.title === 'string' && s.title.trim() ? s.title.trim() : fallback,
-      instructions: typeof s.instructions === 'string' ? s.instructions : '',
-    })
+export function normalizeFrame(raw: unknown): BoardFrame | null {
+  if (!raw || typeof raw !== 'object') return null
+  const f = raw as Record<string, unknown>
+  return {
+    id: typeof f.id === 'string' && f.id ? f.id : uid(),
+    label: typeof f.label === 'string' && f.label.trim() ? f.label.trim() : 'Presentation',
+    x: num(f.x, 0),
+    y: num(f.y, 0),
+    w: Math.max(FRAME_MIN_W, num(f.w, FRAME_W)),
+    h: Math.max(FRAME_MIN_H, num(f.h, FRAME_H)),
   }
-  return steps
 }
 
 export interface PersistedPayload {

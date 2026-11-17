@@ -44,7 +44,7 @@ describe('projects', () => {
     const source = state().createProject('Gear box')
     state().openProject(source.id)
     state().dropStageOnBoard('assembly', 0, 0)
-    state().addEveryStep()
+    state().addFrame({ x: -100, y: -100, w: 300, h: 300 })
     state().duplicateProject(source.id)
     state().duplicateProject(source.id)
 
@@ -52,7 +52,7 @@ describe('projects', () => {
     expect([copy.name, second.name]).toEqual(['Gear box copy', 'Gear box copy 2'])
     expect(copy.id).not.toBe(source.id)
     expect(copy.board).toEqual(open().board)
-    expect(copy.steps).toHaveLength(1)
+    expect(copy.board.frames).toHaveLength(1)
     // changing the original leaves the copy alone
     state().dropStageOnBoard('animation', 50, 0)
     expect(state().projects[1].board.nodes).toHaveLength(1)

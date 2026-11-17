@@ -73,7 +73,7 @@ export function ProjectCard({
       <div className="card-meta" style={{ gap: 'var(--space-3)' }}>
         <span>{count(project.meshes.length, 'mesh', 'meshes')}</span>
         <span>{count(stages, 'stage', 'stages')}</span>
-        <span>{count(project.steps.length, 'step', 'steps')}</span>
+        <span>{count(project.board.frames.length, 'presentation', 'presentations')}</span>
       </div>
       <div className="card-meta" style={{ marginTop: 2, minHeight: 14 }}>
         {project.updatedAt > 0 && (

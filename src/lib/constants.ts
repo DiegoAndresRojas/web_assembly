@@ -5,6 +5,14 @@ export const MESH_W = 132
 export const MESH_H = 132
 export const NODE_W = 76
 
+// a presentation frame: as dropped, and the least it can be resized to
+export const FRAME_W = 460
+export const FRAME_H = 260
+export const FRAME_MIN_W = 200
+export const FRAME_MIN_H = 130
+/** The strip along a frame's top that holds its name and Play button. */
+export const FRAME_HEAD = 38
+
 export const ZOOM_MIN = 0.25
 export const ZOOM_MAX = 2.5
 export const ZOOM_STEP = 0.15

@@ -19,6 +19,9 @@ export interface BoardNodeProps {
   mesh: MeshRecord | null
   selected: boolean
   hovered: boolean
+  /** Its place in the presentation frame it stands in (1-based); null
+   *  when it is in none. */
+  framed: number | null
   onPointerDown: (e: PointerEvent) => void
   onPointerUp: () => void
   onPointerEnter: () => void
@@ -37,6 +40,7 @@ export function BoardNode({
   mesh,
   selected,
   hovered,
+  framed,
   onPointerDown,
   onPointerUp,
   onPointerEnter,
@@ -238,6 +242,7 @@ export function BoardNode({
       ) : (
         <>
           <div
+            className={framed ? 'board-node-framed' : undefined}
             style={{
               display: 'grid',
               placeItems: 'center',
@@ -253,6 +258,11 @@ export function BoardNode({
           >
             {node.kind === 'animation' ? <FilmIcon size={25} /> : <PlusIcon size={26} />}
           </div>
+          {framed && (
+            <span className="board-node-place" title={`Plays number ${framed} in its presentation`}>
+              {framed}
+            </span>
+          )}
           {showOut && (
             <div
               onPointerDown={onLinkStart}

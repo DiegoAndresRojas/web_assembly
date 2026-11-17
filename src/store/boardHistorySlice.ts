@@ -1,4 +1,4 @@
-// Undo/redo for the board: nodes, edges, the library, the steps — and the
+// Undo/redo for the board: nodes, edges, frames, the library — and the
 // stage records that go with them (deleting a node takes its stage along).
 //
 // A snapshot is the open project's parts as they were. The store never
@@ -14,7 +14,7 @@ import type { Project } from '@/types/project'
 
 const HISTORY_LIMIT = 50
 
-type Snapshot = Pick<Project, 'id' | 'meshes' | 'board' | 'stages' | 'steps'>
+type Snapshot = Pick<Project, 'id' | 'meshes' | 'board' | 'stages'>
 
 const past: Snapshot[] = []
 const future: Snapshot[] = []
@@ -27,17 +27,11 @@ export const initialBoardHistoryState: BoardHistoryState = {
 function take(get: Get): Snapshot | null {
   const state = get()
   const p = state.projects.find((x) => x.id === state.pid)
-  return p ? { id: p.id, meshes: p.meshes, board: p.board, stages: p.stages, steps: p.steps } : null
+  return p ? { id: p.id, meshes: p.meshes, board: p.board, stages: p.stages } : null
 }
 
 function same(a: Snapshot, b: Snapshot): boolean {
-  return (
-    a.id === b.id &&
-    a.meshes === b.meshes &&
-    a.board === b.board &&
-    a.stages === b.stages &&
-    a.steps === b.steps
-  )
+  return a.id === b.id && a.meshes === b.meshes && a.board === b.board && a.stages === b.stages
 }
 
 function flag(set: Set): void {
@@ -69,8 +63,8 @@ function put(set: Set, snapshot: Snapshot): void {
     project.meshes = snapshot.meshes
     project.board = snapshot.board
     project.stages = snapshot.stages
-    project.steps = snapshot.steps
     if (!snapshot.board.nodes.some((n) => n.id === state.selId)) state.selId = null
+    if (!snapshot.board.frames.some((f) => f.id === state.selFrame)) state.selFrame = null
     if (!snapshot.board.edges.some((e) => e.id === state.selEdge)) state.selEdge = null
     state.linking = null
   })
