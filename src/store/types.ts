@@ -202,8 +202,12 @@ export interface BoardActions {
   /** Adds a presentation frame of the given rectangle and selects it. */
   addFrame: (rect: Rect) => void
   selectFrame: (frameId: string | null) => void
-  /** Puts a frame's corner at (x, y), taking along the nodes inside it. */
+  /** Puts a frame's corner at (x, y). The nodes stay where they are. */
   moveFrame: (frameId: string, x: number, y: number) => void
+  /** Moves an animation `by` places along the order a frame plays in. */
+  moveFrameScene: (frameId: string, stageId: string, by: number) => void
+  /** Back to playing a frame's animations as they stand on the board. */
+  resetFrameOrder: (frameId: string) => void
   resizeFrame: (frameId: string, rect: Rect) => void
   renameFrame: (frameId: string, label: string) => void
   deleteFrame: (frameId: string) => void

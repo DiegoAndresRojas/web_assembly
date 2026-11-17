@@ -757,6 +757,61 @@ a:hover {
   white-space: nowrap;
 }
 
+.board-frame-order {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 10px;
+  max-width: max(100%, 520px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: 11px;
+  pointer-events: auto;
+}
+
+.board-frame-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 11px;
+  background: var(--color-neutral-800);
+}
+
+.board-frame-chip-name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-frame-chip button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+
+.board-frame-chip button:hover:not(:disabled) {
+  background: var(--color-accent-700);
+  color: #fff;
+}
+
+.board-frame-chip button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
 .board-frame-name {
   display: block;
   font-size: 12px;

@@ -1,6 +1,6 @@
 import type { PointerEvent } from 'react'
 
-import { PlayIcon, TrashIcon } from '@/components/icons'
+import { ChevronRightIcon, PlayIcon, TrashIcon } from '@/components/icons'
 import { NameField } from '@/components/NameField'
 import type { Corner } from '@/lib/frames'
 import type { BoardFrame } from '@/types/project'
@@ -11,8 +11,10 @@ const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 export interface FrameBoxProps {
   frame: BoardFrame
-  /** How many animations stand inside it. */
-  count: number
+  /** The animations standing inside it, in the order they play. */
+  scenes: Array<{ id: string; name: string }>
+  /** The order is one the author set, not the board's. */
+  ownOrder: boolean
   selected: boolean
   /** A press on its top strip: selects it, and starts dragging it. */
   onGrab: (e: PointerEvent) => void
@@ -20,6 +22,8 @@ export interface FrameBoxProps {
   onPlay: () => void
   onRename: (name: string) => void
   onDelete: () => void
+  onMoveScene: (stageId: string, by: number) => void
+  onBoardOrder: () => void
 }
 
 /** A presentation on the board: a rectangle around the animations it
@@ -27,19 +31,63 @@ export interface FrameBoxProps {
  *  the nodes inside it are reached through the rest. */
 export function FrameBox({
   frame,
-  count,
+  scenes,
+  ownOrder,
   selected,
   onGrab,
   onResizeStart,
   onPlay,
   onRename,
   onDelete,
+  onMoveScene,
+  onBoardOrder,
 }: FrameBoxProps) {
+  const count = scenes.length
   return (
     <div
       className={'board-frame' + (selected ? ' board-frame--on' : '')}
       style={{ left: frame.x, top: frame.y, width: frame.w, height: frame.h }}
     >
+      {selected && count > 1 && (
+        // the order it plays in, to change: above the frame, clear of
+        // what stands in it
+        <div className="board-frame-order" onPointerDown={stop}>
+          <span className="text-muted">Plays</span>
+          {scenes.map((scene, i) => (
+            <span key={scene.id} className="board-frame-chip">
+              <button
+                title="Play it earlier"
+                aria-label={`Play ${scene.name} earlier`}
+                disabled={i === 0}
+                onClick={() => onMoveScene(scene.id, -1)}
+              >
+                <ChevronRightIcon size={9} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+              <span className="board-frame-chip-name" title={scene.name}>
+                {i + 1}. {scene.name}
+              </span>
+              <button
+                title="Play it later"
+                aria-label={`Play ${scene.name} later`}
+                disabled={i === count - 1}
+                onClick={() => onMoveScene(scene.id, 1)}
+              >
+                <ChevronRightIcon size={9} />
+              </button>
+            </span>
+          ))}
+          {ownOrder && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 11 }}
+              title="Play them as they stand on the board again: left to right"
+              onClick={onBoardOrder}
+            >
+              Board order
+            </button>
+          )}
+        </div>
+      )}
       <div className="board-frame-head" onPointerDown={onGrab}>
         <button
           className="board-frame-play"
@@ -70,6 +118,7 @@ export function FrameBox({
         </span>
         <span className="text-muted" style={{ flex: 'none', fontSize: 11 }}>
           {count === 0 ? 'empty' : count === 1 ? '1 animation' : `${count} animations`}
+          {ownOrder ? ' · own order' : ''}
         </span>
         <span style={{ flex: 1 }} />
         {selected && (
@@ -85,7 +134,9 @@ export function FrameBox({
         )}
       </div>
       {count === 0 && (
-        <div className="board-frame-hint">Drag animations in here. They play left to right.</div>
+        <div className="board-frame-hint">
+          Drag animations in here. They play left to right, unless you set another order.
+        </div>
       )}
       {selected &&
         CORNERS.map((corner) => (

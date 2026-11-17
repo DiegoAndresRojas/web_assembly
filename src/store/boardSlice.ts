@@ -9,7 +9,7 @@ import {
   ZOOM_STEP,
 } from '@/lib/constants'
 import { duplicateNode } from '@/lib/duplicate'
-import { addFrame, nodesInFrame } from '@/lib/frames'
+import { addFrame, moveInFrame } from '@/lib/frames'
 import { edgeFor } from '@/lib/graph'
 import { normalizeStage } from '@/lib/migrations'
 import type { Draft } from 'immer'
@@ -367,19 +367,25 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     },
     moveFrame(frameId, x, y) {
       set((state) => {
-        const project = findProject(state, state.pid)
-        const frame = project?.board.frames.find((f) => f.id === frameId)
-        if (!project || !frame) return
-        const dx = x - frame.x
-        const dy = y - frame.y
-        if (!dx && !dy) return
-        // what stands in it goes with it
-        for (const node of nodesInFrame(project, frame)) {
-          node.x += dx
-          node.y += dy
-        }
+        // only the frame: the nodes stay where they are (one it no longer
+        // reaches is simply not in it any more)
+        const frame = findProject(state, state.pid)?.board.frames.find((f) => f.id === frameId)
+        if (!frame) return
         frame.x = x
         frame.y = y
+      })
+    },
+    moveFrameScene(frameId, stageId, by) {
+      set((state) => {
+        const project = findProject(state, state.pid)
+        const frame = project?.board.frames.find((f) => f.id === frameId)
+        if (project && frame) moveInFrame(project, frame, stageId, by)
+      })
+    },
+    resetFrameOrder(frameId) {
+      set((state) => {
+        const frame = findProject(state, state.pid)?.board.frames.find((f) => f.id === frameId)
+        if (frame && frame.order.length) frame.order = []
       })
     },
     resizeFrame(frameId, rect) {
@@ -436,5 +442,7 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
     addFrame: recorded(actions.addFrame),
     renameFrame: recorded(actions.renameFrame),
     deleteFrame: recorded(actions.deleteFrame),
+    moveFrameScene: recorded(actions.moveFrameScene),
+    resetFrameOrder: recorded(actions.resetFrameOrder),
   }
 }

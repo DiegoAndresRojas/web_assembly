@@ -229,6 +229,10 @@ export interface BoardFrame {
   y: number
   w: number
   h: number
+  /** The order its animations play in, by stage node id, once the author
+   *  has set one. The ones not listed (all of them, while this is empty)
+   *  follow as they stand on the board: left to right. */
+  order: string[]
 }
 
 export interface Board {

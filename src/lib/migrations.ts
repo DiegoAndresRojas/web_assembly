@@ -57,9 +57,10 @@ import type {
 // 18: projects know when they were made and last changed.
 // 19: presentations are frames drawn on the board around the animations
 //     they play (board.frames); the list of steps is gone.
+// 20: a frame may hold the order its animations play in (order).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 19
+export const CURRENT_VERSION = 20
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -338,6 +339,8 @@ export function normalizeProject(raw: unknown): Project | null {
   const frames = Array.isArray(boardRaw.frames)
     ? boardRaw.frames.map(normalizeFrame).filter((f): f is BoardFrame => !!f)
     : []
+  // (an order names animations that are still on the board)
+  for (const frame of frames) frame.order = frame.order.filter((id) => animationIds.has(id))
   const board: Board = {
     nodes,
     frames,
@@ -400,6 +403,9 @@ export function normalizeFrame(raw: unknown): BoardFrame | null {
     y: num(f.y, 0),
     w: Math.max(FRAME_MIN_W, num(f.w, FRAME_W)),
     h: Math.max(FRAME_MIN_H, num(f.h, FRAME_H)),
+    order: Array.isArray(f.order)
+      ? f.order.filter((id): id is string => typeof id === 'string')
+      : [],
   }
 }
 

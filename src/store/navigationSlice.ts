@@ -155,8 +155,6 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
       set((state) => {
         state.aid = stageId
         state.wmode = wmodeForKind(node.kind)
-        // each animation is first seen the way its author framed it
-        state.cameraView = true
         state.kpOn = false
         state.pendingPicks = []
         state.asmOpen = []

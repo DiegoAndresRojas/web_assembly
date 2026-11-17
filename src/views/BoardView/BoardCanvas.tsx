@@ -13,12 +13,14 @@ import { FRAME_MIN_H, FRAME_MIN_W } from '@/lib/constants'
 import {
   frameAnimations,
   frameAround,
+  hasOwnOrder,
   framedPlaces,
   rectFrom,
   resizeRect,
   type Corner,
   type Rect,
 } from '@/lib/frames'
+import { stageName } from '@/lib/cameras'
 import { useStore } from '@/store'
 import type { NodeKind, Project } from '@/types/project'
 import { BoardNode } from './BoardNode'
@@ -96,6 +98,8 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const resizeFrame = useStore((s) => s.resizeFrame)
   const renameFrame = useStore((s) => s.renameFrame)
   const deleteFrame = useStore((s) => s.deleteFrame)
+  const moveFrameScene = useStore((s) => s.moveFrameScene)
+  const resetFrameOrder = useStore((s) => s.resetFrameOrder)
   const openViewer = useStore((s) => s.openViewer)
 
   // which animations stand in a frame, and in what order they play
@@ -252,7 +256,10 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
           <FrameBox
             key={frame.id}
             frame={frame}
-            count={frameAnimations(project, frame).length}
+            scenes={frameAnimations(project, frame).map((n) => ({ id: n.id, name: stageName(n) }))}
+            ownOrder={hasOwnOrder(project, frame)}
+            onMoveScene={(stageId, by) => moveFrameScene(frame.id, stageId, by)}
+            onBoardOrder={() => resetFrameOrder(frame.id)}
             selected={selFrame === frame.id}
             onGrab={(e) => {
               e.stopPropagation()

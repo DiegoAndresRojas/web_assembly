@@ -6,6 +6,7 @@ import {
   MoveIcon,
   PauseIcon,
   PlayIcon,
+  RepeatIcon,
   RestoreIcon,
   RotateIcon,
   SkipBackIcon,
@@ -118,6 +119,8 @@ export function ViewerView({ stageId }: { stageId: string }) {
   // default view)
   useEffect(() => resetViewerOrbit(), [])
   const session = useWorldSession(container, stageId)
+  // one animation after another by itself, or each one waiting to be asked
+  const [auto, setAuto] = useState(true)
 
   const { frame, scenes } = project ? playlistOf(project, frameId) : { frame: null, scenes: [] }
   const index = scenes.findIndex((s) => s.stageId === stageId)
@@ -132,11 +135,11 @@ export function ViewerView({ stageId }: { stageId: string }) {
 
   // like a video: an animation that plays to its end is followed by the next
   useEffect(() => {
-    if (!nextId) return
+    if (!nextId || !auto) return
     return useStore.subscribe((s, prev) => {
       if (prev.playing && !s.playing && s.aid === stageId && s.playT >= duration) viewScene(nextId)
     })
-  }, [stageId, nextId, duration, viewScene])
+  }, [stageId, nextId, duration, viewScene, auto])
 
   /** Play / pause; at the very end, the whole presentation again. */
   const play = () => {
@@ -149,14 +152,6 @@ export function ViewerView({ stageId }: { stageId: string }) {
       }
     }
     onAnimPlay()
-  }
-
-  /** Back to how the animation has it: the pieces where they are at this
-   *  second, seen the way the author framed it. */
-  const restore = () => {
-    restoreViewerScene()
-    if (hasCamera) setCameraView(true)
-    else session?.frameAll()
   }
 
   useEffect(() => {
@@ -258,9 +253,22 @@ export function ViewerView({ stageId }: { stageId: string }) {
           <button
             className="viewer-btn"
             title="Put every piece back where this animation has it at this second (R)"
-            onClick={restore}
+            onClick={restoreViewerScene}
           >
             <RestoreIcon size={16} /> Reset
+          </button>
+
+          <button
+            className={'viewer-btn' + (auto ? ' viewer-btn--on' : '')}
+            title={
+              auto
+                ? 'Each animation is followed by the next — click to stop after each one'
+                : 'Stops after each animation — click to play one after another'
+            }
+            aria-pressed={auto}
+            onClick={() => setAuto(!auto)}
+          >
+            <RepeatIcon size={15} /> Auto-advance
           </button>
 
           <span style={{ flex: 1 }} />
@@ -292,9 +300,10 @@ export function ViewerView({ stageId }: { stageId: string }) {
               className={'viewer-btn' + (through ? ' viewer-btn--on' : '')}
               title={
                 through
-                  ? 'Showing the shot the author chose — click to look around freely'
-                  : 'Look through the camera the author placed'
+                  ? 'Showing the shots the author chose — click to move the camera yourself'
+                  : 'You move the camera — click to see the shots the author chose'
               }
+              aria-pressed={through}
               onClick={() => (through ? lookAroundFromCamera() : setCameraView(true))}
             >
               <CameraTrackIcon size={14} /> Author’s view

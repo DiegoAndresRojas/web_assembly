@@ -29,16 +29,42 @@ function holds(frame: Rect, node: BoardNode): boolean {
   )
 }
 
-/** Every node standing inside the frame — what moves along with it. */
-export function nodesInFrame(project: Project, frame: Rect): BoardNode[] {
-  return project.board.nodes.filter((n) => holds(frame, n))
+/** The animations a frame plays, in order: the one its author set (if
+ *  any), then the rest as they stand — left to right, then top to bottom. */
+export function frameAnimations(project: Project, frame: Rect & { order?: string[] }): BoardNode[] {
+  const order = frame.order ?? []
+  const rank = (node: BoardNode) => {
+    const i = order.indexOf(node.id)
+    return i < 0 ? order.length : i
+  }
+  return project.board.nodes
+    .filter((n) => n.kind === 'animation' && holds(frame, n))
+    .sort((a, b) => rank(a) - rank(b) || a.x - b.x || a.y - b.y)
 }
 
-/** The animations a frame plays, in order. */
-export function frameAnimations(project: Project, frame: Rect): BoardNode[] {
-  return nodesInFrame(project, frame)
-    .filter((n) => n.kind === 'animation')
-    .sort((a, b) => a.x - b.x || a.y - b.y)
+/** Whether the frame plays in an order of the author's, not the board's. */
+export function hasOwnOrder(project: Project, frame: BoardFrame): boolean {
+  const inside = new Set(frameAnimations(project, frame).map((n) => n.id))
+  return frame.order.some((id) => inside.has(id))
+}
+
+/** Moves an animation `by` places along the frame's order (stopping at
+ *  its ends) — from then on the frame keeps the order as it is now.
+ *  Mutates the project — an immer draft in the store. */
+export function moveInFrame(
+  project: Project,
+  frame: BoardFrame,
+  stageId: string,
+  by: number,
+): void {
+  const ids = frameAnimations(project, frame).map((n) => n.id)
+  const from = ids.indexOf(stageId)
+  if (from < 0) return
+  const to = Math.max(0, Math.min(ids.length - 1, from + by))
+  if (to === from) return
+  ids.splice(from, 1)
+  ids.splice(to, 0, stageId)
+  frame.order = ids
 }
 
 /** For each animation that is in a frame, its place in it (1-based) — in
@@ -67,6 +93,7 @@ export function addFrame(project: Project, rect: Rect): BoardFrame {
     y: rect.y,
     w: Math.max(FRAME_MIN_W, rect.w),
     h: Math.max(FRAME_MIN_H, rect.h),
+    order: [],
   }
   project.board.frames.push(frame)
   return frame

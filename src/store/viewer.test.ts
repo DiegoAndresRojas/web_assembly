@@ -101,17 +101,39 @@ describe('the viewer', () => {
     expect(useStore.getState().notices).toHaveLength(1)
   })
 
-  it('takes the nodes inside a frame along when it is dragged', () => {
+  it('leaves the nodes where they are when a frame is dragged', () => {
     const pid = load(sample([{ id: 'f', x: 200, y: 0, w: 300, h: 200 }]))
     const s = useStore.getState()
     s.openProject(pid)
-    s.moveFrame('f', 250, 30)
-    const at = (id: string) => {
-      const n = useStore.getState().projects[0].board.nodes.find((x) => x.id === id)!
-      return [n.x, n.y]
-    }
-    expect(at('anim')).toEqual([350, 130])
-    expect(at('still')).toEqual([100, 100])
+    const project = () => useStore.getState().projects[0]
+    s.moveFrame('f', 1000, 30)
+    expect(project().board.nodes.find((n) => n.id === 'anim')).toMatchObject({ x: 300, y: 100 })
+    // …so what it no longer reaches is not in it any more
+    expect(playlistOf(project(), 'f').scenes).toEqual([])
+  })
+
+  it('plays in the order the author set, until the board’s is asked for again', () => {
+    const pid = load(sample([{ id: 'f', x: 0, y: 0, w: 400, h: 200 }]))
+    const s = useStore.getState()
+    s.openProject(pid)
+    const order = () =>
+      playlistOf(useStore.getState().projects[0], 'f').scenes.map((x) => x.stageId)
+    expect(order()).toEqual(['still', 'anim'])
+    s.moveFrameScene('f', 'anim', -1)
+    expect(order()).toEqual(['anim', 'still'])
+    // (already first: nothing to do, nothing to undo)
+    s.moveFrameScene('f', 'anim', -1)
+    // moving the nodes about no longer changes it
+    s.moveNode('anim', 390, 100)
+    expect(order()).toEqual(['anim', 'still'])
+    // one that comes in later goes last
+    s.dropStageOnBoard('animation', 20, 100)
+    expect(order().slice(0, 2)).toEqual(['anim', 'still'])
+    expect(order()).toHaveLength(3)
+    s.resetFrameOrder('f')
+    expect(order().slice(1)).toEqual(['still', 'anim'])
+    s.boardUndo()
+    expect(order().slice(0, 2)).toEqual(['anim', 'still'])
   })
 
   it('opens on the first animation and plays it', () => {
@@ -132,9 +154,10 @@ describe('the viewer', () => {
     const pid = load(sample())
     const s = useStore.getState()
     s.openViewer(pid, 'projects')
+    // (whose camera it is seen through stays as the viewer left it)
     s.setCameraView(false)
     s.viewScene('still')
-    expect(useStore.getState()).toMatchObject({ aid: 'still', playing: false, cameraView: true })
+    expect(useStore.getState()).toMatchObject({ aid: 'still', playing: false, cameraView: false })
   })
 
   it('goes back to where it was opened from, leaving the author’s views alone', () => {
