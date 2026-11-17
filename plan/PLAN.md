@@ -123,9 +123,28 @@ Comprobación manual:
 - Borrar una etapa del tablero y recuperarla con Ctrl+Z, con su contenido y su paso.
 - Mover un nodo, deshacer y rehacer.
 
+### H3 — Visor (rama `h3/viewer`) — pendiente de comprobar a mano
+
+Qué se hizo (commit `feat: a viewer to follow the assembly step by step`):
+
+1. Vista "viewer": lista de pasos, título e instrucciones del paso, anterior / siguiente, reproducir / pausar / repetir, barra de progreso. Teclas: ← →, Espacio, R, Esc.
+2. Se entra con el botón "View" de la tarjeta del proyecto o del tablero. Con `?viewer` en la dirección, la app solo deja importar y ver proyectos.
+3. Sin pasos definidos, recorre las animaciones en el orden de la cadena.
+4. Si el paso tiene cámara, se ve el plano del autor; un botón pasa a vista libre (órbita) y "Frame all" encuadra todo. La vista libre se conserva de un paso al siguiente.
+5. En el visor no hay rejilla, ni cuerpos de cámara o de luces, ni selección; no se guarda nada de la vista del autor.
+
+Queda de H3 (no hecho): resaltar las piezas nuevas de cada paso, animación por defecto generada para los pasos sin animar, y separar la reproducción en `lib/player.ts`.
+
+Comprobación manual:
+
+- "View" en un proyecto con pasos: se reproduce el primero; pasar al siguiente y volver.
+- Paso con cámara: alternar "Author's view" / "Free view" y orbitar.
+- Paso que es un ensamblaje (sin animación): se ve montado, sin botón de reproducir.
+- Abrir la app con `?viewer` al final de la dirección: solo "Import project" y "View".
+
 ### Pendiente de estas ramas
 
-- Fusionar `h2/step-sequence` en `main` (contiene a todas las anteriores).
+- Fusionar `h3/viewer` en `main` (contiene a todas las anteriores).
 - Subir `main` a GitHub.
 
 ## 6. Hitos pendientes
@@ -226,6 +245,6 @@ Tareas:
 
 ## 8. Orden recomendado
 
-1. Comprobar H2 a mano, fusionar `h2/step-sequence` en `main` y subir.
-2. H3 (visor): con los pasos ya hay qué recorrer.
+1. Comprobar H2 y H3 a mano, fusionar `h3/viewer` en `main` y subir.
+2. Lo que quedó fuera de H2 y H3 (ver arriba), según haga falta.
 3. H4, H5 y H6 según lo que más se eche en falta al usar el visor.
