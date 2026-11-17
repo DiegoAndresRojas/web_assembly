@@ -3,6 +3,7 @@ import { extOf, filesAreKept, MESH_EXTS, putFile } from '@/lib/meshFiles'
 import { isTiny, recommendedFactor } from '@/lib/meshScale'
 import { packProject, projectFileName, unpackProject } from '@/lib/projectFile'
 import { normalizeMesh, normalizeProject } from '@/lib/migrations'
+import { recordBoardEdit } from './boardHistorySlice'
 import { findProject } from './helpers'
 import type { Get, ProjectsActions, ProjectsState, Set } from './types'
 import { DEFAULT_MESH_COLOR } from '@/lib/constants'
@@ -22,7 +23,7 @@ export const initialProjectsState: ProjectsState = {
 const reason = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
-  return {
+  const actions: ProjectsActions = {
     createProject(name) {
       const project = normalizeProject({ name: name ?? 'Project' })!
       set((state) => {
@@ -252,6 +253,21 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
         state.scaleEdit = null
       })
     },
+  }
+
+  /** The same action, undoable with the board's history. */
+  const recorded =
+    <A extends unknown[]>(action: (...args: A) => void) =>
+    (...args: A) =>
+      recordBoardEdit(get, set, () => action(...args))
+
+  return {
+    ...actions,
+    // (deleting a mesh from the library; deleting a project leaves nothing
+    // open to undo on)
+    confirmDelete: recorded(actions.confirmDelete),
+    applyColorEditor: recorded(actions.applyColorEditor),
+    applyScaleEditor: recorded(actions.applyScaleEditor),
   }
 }
 

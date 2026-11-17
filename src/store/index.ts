@@ -6,6 +6,7 @@ import { STORAGE_KEY } from '@/lib/constants'
 import { CURRENT_VERSION, runMigrations } from '@/lib/migrations'
 import { createAnimationSlice, initialAnimationState } from './animationSlice'
 import { createAssemblySlice, initialAssemblyState } from './assemblySlice'
+import { createBoardHistorySlice, initialBoardHistoryState } from './boardHistorySlice'
 import { createBoardSlice, initialBoardState } from './boardSlice'
 import { createExportSlice, initialExportState } from './exportSlice'
 import { createHistorySlice, initialHistoryState } from './historySlice'
@@ -13,6 +14,7 @@ import { createLightsSlice } from './lightsSlice'
 import { createNoticesSlice, initialNoticesState } from './noticesSlice'
 import { createNavigationSlice, initialNavigationState } from './navigationSlice'
 import { createProjectStorage } from './persistStorage'
+import { createStepsSlice } from './stepsSlice'
 import { createProjectsSlice, initialProjectsState } from './projectsSlice'
 import type { AppState } from './types'
 import { createWorldSlice, initialWorldState } from './worldSlice'
@@ -29,6 +31,7 @@ export const useStore = create<AppState>()(
       ...initialAnimationState,
       ...initialExportState,
       ...initialNoticesState,
+      ...initialBoardHistoryState,
 
       ...createProjectsSlice(set, get),
       ...createNavigationSlice(set, get),
@@ -40,6 +43,8 @@ export const useStore = create<AppState>()(
       ...createLightsSlice(set, get),
       ...createExportSlice(set),
       ...createNoticesSlice(set),
+      ...createBoardHistorySlice(set, get),
+      ...createStepsSlice(set, get),
     })),
     {
       name: STORAGE_KEY,

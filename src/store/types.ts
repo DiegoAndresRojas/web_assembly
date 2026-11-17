@@ -172,6 +172,32 @@ export interface BoardActions {
   setPaletteHover: (which: 'assembly' | 'animation' | null) => void
 }
 
+// ---------- board history (undo/redo on the board) ----------
+export interface BoardHistoryState {
+  canBoardUndo: boolean
+  canBoardRedo: boolean
+}
+
+export interface BoardHistoryActions {
+  /** Makes the board as it is now something to come back to — for edits
+   *  made in many small changes (dragging a node). */
+  pushBoardHistory: () => void
+  boardUndo: () => void
+  boardRedo: () => void
+  clearBoardHistory: () => void
+}
+
+// ---------- steps (the assembly sequence) ----------
+export interface StepsActions {
+  /** Makes a stage the last step. */
+  addStep: (stageId: string) => void
+  /** Adds every stage that is not a step yet, in the order they build up. */
+  addEveryStep: () => void
+  removeStep: (stepId: string) => void
+  moveStep: (stepId: string, by: number) => void
+  updateStep: (stepId: string, patch: { title?: string; instructions?: string }) => void
+}
+
 // ---------- world (assembly/animate shared) ----------
 export interface WorldState {
   worldSelId: string | null
@@ -442,4 +468,7 @@ export type AppState = ProjectsState &
   ExportState &
   ExportActions &
   NoticesState &
-  NoticesActions
+  NoticesActions &
+  BoardHistoryState &
+  BoardHistoryActions &
+  StepsActions

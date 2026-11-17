@@ -227,12 +227,26 @@ export interface Board {
   edges: BoardEdge[]
 }
 
+/** One step of the assembly sequence: a stage of the board, as someone
+ *  following the assembly is told about it. */
+export interface Step {
+  id: string
+  /** The stage node it shows — an animation, or an assembly as it stands.
+   *  A stage is a step at most once. */
+  stageId: string
+  title: string
+  /** What to do in this step, in the author's words. */
+  instructions: string
+}
+
 export interface Project {
   id: string
   name: string
   meshes: MeshRecord[]
   board: Board
   stages: Record<string, Stage>
+  /** The assembly sequence, in the order it is followed. */
+  steps: Step[]
 }
 
 /** A stage input: a mesh node (`mesh` set) or an upstream assembly node

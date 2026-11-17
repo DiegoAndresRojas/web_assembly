@@ -46,7 +46,9 @@ export function validStageView(view: StageView | undefined, stage: Stage | undef
   const sel = view.selection
   const track = sel ? stage.tracks.find((t) => t.id === sel.trackId) : undefined
   const selectionOk =
-    !!sel && !!track && (sel.actionId === 'init' || track.actions.some((a) => a.id === sel.actionId))
+    !!sel &&
+    !!track &&
+    (sel.actionId === 'init' || track.actions.some((a) => a.id === sel.actionId))
   return {
     asmOpen: view.asmOpen.filter(isInput),
     worldSelId: view.worldSelId && isInput(view.worldSelId) ? view.worldSelId : null,
@@ -65,6 +67,7 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.pan = { x: 60, y: 60 }
         state.zoom = 1
       })
+      get().clearBoardHistory()
     },
 
     backToProjects() {
@@ -93,8 +96,10 @@ export function createNavigationSlice(set: Set, get: Get): NavigationActions {
         state.playT = 0
         state.selection = null
       })
-      // undo history belongs to the stage being left
+      // undo history belongs to the stage being left — and the board's
+      // would take back what is done inside the stage along with it
       get().clearHistory()
+      get().clearBoardHistory()
       // Creates the stage record (if this is the first time it's opened)
       // and makes sure every mesh wired in via board edges has a member
       // row — without this, WorldView has nothing to render.

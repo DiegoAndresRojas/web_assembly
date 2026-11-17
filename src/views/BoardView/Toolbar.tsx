@@ -1,6 +1,6 @@
 import { Button } from '@/components/Button'
 import { IconButton } from '@/components/IconButton'
-import { MoveIcon, SelectIcon } from '@/components/icons'
+import { MoveIcon, SelectIcon, UndoIcon } from '@/components/icons'
 import { useStore } from '@/store'
 
 function ZoomOutIcon() {
@@ -21,6 +21,10 @@ function ZoomInIcon() {
 export function BoardToolSwitcher() {
   const tool = useStore((s) => s.tool)
   const setTool = useStore((s) => s.setTool)
+  const canUndo = useStore((s) => s.canBoardUndo)
+  const canRedo = useStore((s) => s.canBoardRedo)
+  const undo = useStore((s) => s.boardUndo)
+  const redo = useStore((s) => s.boardRedo)
   return (
     <div
       style={{
@@ -46,6 +50,13 @@ export function BoardToolSwitcher() {
       </IconButton>
       <IconButton size="md" active={tool === 'pan'} title="Pan" onClick={() => setTool('pan')}>
         <MoveIcon size={17} />
+      </IconButton>
+      <div style={{ height: 1, margin: '2px 3px', background: 'var(--color-divider)' }} />
+      <IconButton size="md" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}>
+        <UndoIcon size={16} />
+      </IconButton>
+      <IconButton size="md" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={redo}>
+        <UndoIcon size={16} style={{ transform: 'scaleX(-1)' }} />
       </IconButton>
     </div>
   )

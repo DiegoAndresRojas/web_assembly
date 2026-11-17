@@ -169,6 +169,12 @@ a:hover {
 .icon-btn:hover {
   color: var(--color-text);
 }
+.icon-btn:disabled,
+.tool-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
 .icon-btn--active,
 .icon-btn--active:hover {
   color: var(--color-accent-100);

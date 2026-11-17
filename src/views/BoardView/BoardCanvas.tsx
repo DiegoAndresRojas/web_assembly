@@ -6,6 +6,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react'
 
+import { stageName } from '@/lib/cameras'
 import { useStore } from '@/store'
 import type { NodeKind, Project } from '@/types/project'
 import { BoardNode } from './BoardNode'
@@ -22,6 +23,8 @@ interface DragAnchor {
   y0: number
   px: number
   py: number
+  /** Whether the node has left where the drag found it. */
+  moved: boolean
 }
 
 export function BoardCanvas({ project }: BoardCanvasProps) {
@@ -53,6 +56,8 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
   const dropStageOnBoard = useStore((s) => s.dropStageOnBoard)
   const openColorEditor = useStore((s) => s.openColorEditor)
   const openStage = useStore((s) => s.openStage)
+  const pushBoardHistory = useStore((s) => s.pushBoardHistory)
+  const notify = useStore((s) => s.notify)
 
   const pointFromEvent = useCallback(
     (clientX: number, clientY: number) => {
@@ -79,6 +84,9 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
     }
     if (dragRef.current) {
       const p = pointFromEvent(e.clientX, e.clientY)
+      // the whole drag is one thing to undo: where the node was before it
+      if (!dragRef.current.moved) pushBoardHistory()
+      dragRef.current.moved = true
       moveNode(
         dragRef.current.nodeId,
         dragRef.current.x0 + (p.x - dragRef.current.px),
@@ -158,7 +166,14 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
               selectNode(node.id)
               if (effectiveTool() === 'select') {
                 const p = pointFromEvent(e.clientX, e.clientY)
-                dragRef.current = { nodeId: node.id, x0: node.x, y0: node.y, px: p.x, py: p.y }
+                dragRef.current = {
+                  nodeId: node.id,
+                  x0: node.x,
+                  y0: node.y,
+                  px: p.x,
+                  py: p.y,
+                  moved: false,
+                }
               }
             }}
             onPointerUp={() => {
@@ -175,6 +190,10 @@ export function BoardCanvas({ project }: BoardCanvasProps) {
             onDelete={(e) => {
               e.stopPropagation()
               deleteNode(node.id)
+              // a stage goes with everything made inside it: say how to get it back
+              if (node.kind !== 'mesh') {
+                notify(`${stageName(node)} deleted — Ctrl+Z brings it back.`, 'info')
+              }
             }}
             onRename={(name) => renameNode(node.id, name)}
             onDuplicate={(e) => {

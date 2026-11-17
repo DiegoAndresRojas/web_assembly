@@ -22,6 +22,7 @@ import type {
   StageFloor,
   StageLight,
   StageMember,
+  Step,
   TimelineAction,
   Track,
   Vec3,
@@ -47,9 +48,10 @@ import type {
 // 15: mesh files live in a store of their own (IndexedDB), keyed by the
 //     hash of their contents; a mesh saved with its file inside keeps it
 //     until it is moved there.
+// 16: projects have a sequence of steps (steps).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 15
+export const CURRENT_VERSION = 16
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -370,7 +372,27 @@ export function normalizeProject(raw: unknown): Project | null {
     meshes,
     board,
     stages,
+    steps: normalizeSteps(p.steps, nodes),
   }
+}
+
+/** The steps whose stage is still on the board, each stage once. */
+function normalizeSteps(raw: unknown, nodes: BoardNode[]): Step[] {
+  const steps: Step[] = []
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!item || typeof item !== 'object') continue
+    const s = item as Record<string, unknown>
+    const node = nodes.find((n) => n.id === s.stageId && n.kind !== 'mesh')
+    if (!node || steps.some((step) => step.stageId === node.id)) continue
+    const fallback = node.label?.trim() || node.kind[0].toUpperCase() + node.kind.slice(1)
+    steps.push({
+      id: typeof s.id === 'string' && s.id ? s.id : uid(),
+      stageId: node.id,
+      title: typeof s.title === 'string' && s.title.trim() ? s.title.trim() : fallback,
+      instructions: typeof s.instructions === 'string' ? s.instructions : '',
+    })
+  }
+  return steps
 }
 
 export interface PersistedPayload {

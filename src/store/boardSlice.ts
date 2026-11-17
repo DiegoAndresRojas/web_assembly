@@ -7,6 +7,7 @@ import type { Draft } from 'immer'
 import { recoverFromChain } from '@/lib/chain'
 import { recoverLightsFromChain } from '@/lib/lights'
 import { clamp, uid } from '@/lib/utils'
+import { recordBoardEdit } from './boardHistorySlice'
 import { ensureStage, findProject } from './helpers'
 import type { BoardActions, BoardState, Get, Set } from './types'
 import type { NodeKind, Project } from '@/types/project'
@@ -51,7 +52,7 @@ function pointInNode(kind: NodeKind, nx: number, ny: number, x: number, y: numbe
 }
 
 export function createBoardSlice(set: Set, get: Get): BoardActions {
-  return {
+  const actions: BoardActions = {
     effectiveTool() {
       const { tool, ctrlDown } = get()
       if (!ctrlDown) return tool
@@ -185,11 +186,13 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         const project = findProject(state, state.pid)
         if (!project) return
         const node = project.board.nodes.find((n) => n.id === nodeId)
+        if (!node) return
         project.board.nodes = project.board.nodes.filter((n) => n.id !== nodeId)
         project.board.edges = project.board.edges.filter(
           (e) => e.from !== nodeId && e.to !== nodeId,
         )
         if (node && node.kind !== 'mesh') delete project.stages[nodeId]
+        project.steps = project.steps.filter((s) => s.stageId !== nodeId)
         // meshes and upstream assemblies are both stage inputs — drop every
         // downstream reference to the deleted node
         for (const stageId in project.stages) {
@@ -290,5 +293,24 @@ export function createBoardSlice(set: Set, get: Get): BoardActions {
         state.hoverAnimation = which === 'animation'
       })
     },
+  }
+
+  /** The same action, undoable with the board's history. */
+  const recorded =
+    <A extends unknown[]>(action: (...args: A) => void) =>
+    (...args: A) =>
+      recordBoardEdit(get, set, () => action(...args))
+
+  return {
+    ...actions,
+    dropMeshOnBoard: recorded(actions.dropMeshOnBoard),
+    dropStageOnBoard: recorded(actions.dropStageOnBoard),
+    linkIfDropped: recorded(actions.linkIfDropped),
+    renameNode: recorded(actions.renameNode),
+    duplicateNode: recorded(actions.duplicateNode),
+    deleteNode: recorded(actions.deleteNode),
+    completeLinking: recorded(actions.completeLinking),
+    removeEdge: recorded(actions.removeEdge),
+    deleteSelectedEdge: recorded(actions.deleteSelectedEdge),
   }
 }

@@ -1,4 +1,4 @@
-import type { DragEvent } from 'react'
+import { useEffect, type DragEvent } from 'react'
 
 import { BackIcon, FilmIcon, PlusIcon } from '@/components/icons'
 import { useStore } from '@/store'
@@ -7,6 +7,7 @@ import { ColorDialog } from './ColorDialog'
 import { DeleteMeshDialog } from './DeleteMeshDialog'
 import { MeshLibrary } from './MeshLibrary'
 import { ScaleDialog } from './ScaleDialog'
+import { StepsPanel } from './StepsPanel'
 
 function PaletteToken({
   icon,
@@ -74,6 +75,26 @@ export function BoardView() {
   const hoverAssembly = useStore((s) => s.hoverAssembly)
   const hoverAnimation = useStore((s) => s.hoverAnimation)
   const setPaletteHover = useStore((s) => s.setPaletteHover)
+  const boardUndo = useStore((s) => s.boardUndo)
+  const boardRedo = useStore((s) => s.boardRedo)
+
+  // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) on the board — a text field keeps
+  // its own undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null
+      const typing =
+        !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable)
+      if (typing || !(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      e.preventDefault()
+      if (key === 'y' || e.shiftKey) boardRedo()
+      else boardUndo()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [boardUndo, boardRedo])
 
   if (!project) return null
 
@@ -115,6 +136,8 @@ export function BoardView() {
         />
 
         <MeshLibrary project={project} />
+
+        <StepsPanel project={project} />
 
         <div
           style={{
