@@ -17,6 +17,7 @@ import { useWorldSession } from '@/hooks/useWorldSession'
 import { parentKey } from '@/lib/graph'
 import { useStore } from '@/store'
 import type { WorldSession } from '@/lib/three/worldSession'
+import { PoseFields } from './PoseFields'
 
 export interface WorldViewportProps {
   stageId: string
@@ -49,6 +50,7 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
   const setGizmoMode = useStore((s) => s.setGizmoMode)
   const selectParentPiece = useStore((s) => s.selectParentPiece)
   const hint = useStore((s) => s.hint)
+  const playing = useStore((s) => s.playing)
   const kpOn = useStore((s) => s.kpOn)
   const pendingPicks = useStore((s) => s.pendingPicks)
   const cameraView = useStore((s) => s.cameraView)
@@ -92,22 +94,32 @@ export function WorldViewport({ stageId, onSession }: WorldViewportProps) {
             boxShadow: 'var(--shadow-md)',
           }}
         >
-          <IconButton
-            size="md"
-            active={gizmoMode === 'translate'}
-            title="Move"
-            onClick={() => setGizmoMode('translate')}
-          >
-            <MoveIcon size={17} />
-          </IconButton>
-          <IconButton
-            size="md"
-            active={gizmoMode === 'rotate'}
-            title="Rotate"
-            onClick={() => setGizmoMode('rotate')}
-          >
-            <RotateIcon size={17} />
-          </IconButton>
+          <div style={{ position: 'relative' }}>
+            <IconButton
+              size="md"
+              active={gizmoMode === 'translate'}
+              title="Move"
+              onClick={() => setGizmoMode('translate')}
+            >
+              <MoveIcon size={17} />
+            </IconButton>
+            {gizmoMode === 'translate' && !playing && (
+              <PoseFields session={session} id={worldSelId!} mode="translate" />
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            <IconButton
+              size="md"
+              active={gizmoMode === 'rotate'}
+              title="Rotate"
+              onClick={() => setGizmoMode('rotate')}
+            >
+              <RotateIcon size={17} />
+            </IconButton>
+            {gizmoMode === 'rotate' && !playing && (
+              <PoseFields session={session} id={worldSelId!} mode="rotate" />
+            )}
+          </div>
           {worldSelId && parentKey(worldSelId) && (
             <IconButton
               size="md"

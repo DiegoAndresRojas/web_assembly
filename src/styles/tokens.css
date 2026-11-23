@@ -1236,3 +1236,82 @@ a:hover {
   font-size: 15px;
   pointer-events: none;
 }
+
+/* ---- X / Y / Z beside the gizmo's Move / Rotate button ---- */
+
+.pose-fields {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  translate: 0 -50%;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  animation: pose-fields-in 160ms ease-out;
+}
+
+@keyframes pose-fields-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.pose-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-900);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  cursor: text;
+}
+
+.pose-field:focus-within {
+  box-shadow: 0 0 0 1px var(--color-accent-300);
+}
+
+.pose-field span {
+  font-size: 10px;
+}
+
+.pose-field--x span {
+  color: #e06a6a;
+}
+
+.pose-field--y span {
+  color: #7ac08f;
+}
+
+.pose-field--z span {
+  color: #6a8fe0;
+}
+
+.pose-field input {
+  width: 52px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: right;
+}
+
+.pose-field i {
+  margin-left: -2px;
+  font-style: normal;
+  color: var(--color-neutral-500);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pose-fields {
+    animation: none;
+  }
+}

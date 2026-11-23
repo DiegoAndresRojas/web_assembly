@@ -629,6 +629,22 @@ export class WorldSession {
     }
   }
 
+  /** The pose of `id` as the viewport shows it now (null: not there). */
+  getObjectPose(id: string): Pose | null {
+    const obj = this.getObject(id)
+    return obj ? readPose(obj) : null
+  }
+
+  /** Puts `id` at `pose` as a gizmo drag would — typed in rather than
+   *  dragged — and reports it the same way (onObjectMoved). */
+  setObjectPose(id: string, pose: Pose): void {
+    const obj = this.getObject(id)
+    if (!obj || this.locked) return
+    const how = this.hinge && id === this.selectedId ? 'turn' : 'move'
+    applyPose(obj, pose)
+    this.opts.onObjectMoved?.(id, readPose(obj), how)
+  }
+
   setMode(mode: GizmoMode): void {
     this.gizmoMode = mode
     this.gizmo?.setMode(mode)
