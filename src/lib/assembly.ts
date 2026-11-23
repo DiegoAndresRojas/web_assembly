@@ -15,7 +15,7 @@ import {
   movePose,
   relativePose,
 } from './rigid'
-import type { Axis, KeypointLink, Pose, Stage } from '@/types/project'
+import type { Axis, KeypointLink, Pose, Stage, Vec3 } from '@/types/project'
 
 const IDENTITY: Pose = { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0 } }
 
@@ -117,11 +117,132 @@ export function solveLink(stage: Stage, link: KeypointLink): void {
 
   const others = stage.links.filter((l) => l !== link && l.id !== link.id)
   const withB = linkedBodies(others, link.nodeB)
-  // already tied to A some other way: B cannot bring that group along
-  const moving = withB.includes(link.nodeA) ? [link.nodeB] : [link.nodeB, ...withB]
-  moveBodies(stage, moving, delta)
-  link.state = 'solved'
-  link.gap = 0
+  if (withB.includes(link.nodeA)) {
+    // already tied to A some other way: those links hold, B only turns
+    // about them
+    solveHeldLink(stage, link, others)
+    return
+  }
+  moveBodies(stage, [link.nodeB, ...withB], delta)
+  refreshLinks(stage)
+}
+
+/** Links closer than this count as touching. */
+const TOUCH = 1e-3
+
+/** Re-reads whether each link's two points touch, after bodies moved. */
+export function refreshLinks(stage: Stage): void {
+  for (const link of stage.links) {
+    const gap = vec.distance(link.pointA, link.pointB)
+    link.gap = gap <= TOUCH ? 0 : gap
+    link.state = gap <= TOUCH ? 'solved' : 'gap'
+  }
+}
+
+/** The bodies that turn with `id` when it pivots against `fixed`: `id`
+ *  and whatever hangs on it without going through `fixed`. */
+export function turningSide(links: KeypointLink[], id: string, fixed: string): string[] {
+  const free = links.filter((l) => l.nodeA !== fixed && l.nodeB !== fixed)
+  return [id, ...linkedBodies(free, id)].filter((b) => b !== fixed)
+}
+
+/** The point on `side`'s end of a link. */
+const endOn = (link: KeypointLink, side: Set<string>): Vec3 =>
+  side.has(link.nodeA) ? link.pointA : link.pointB
+
+function rotationAbout(pivot: Vec3, q: THREE.Quaternion): THREE.Matrix4 {
+  return new THREE.Matrix4()
+    .makeTranslation(pivot.x, pivot.y, pivot.z)
+    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))
+    .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
+}
+
+const v3 = (p: Vec3) => new THREE.Vector3(p.x, p.y, p.z)
+
+/** A new link between two bodies already tied together: the links that
+ *  tie B's side to the rest stay where they are, and B's side turns about
+ *  them to bring the new points together — about the one point they share
+ *  (one link), or about the line through two of them (two or more). What
+ *  the turn cannot close stays as a gap on the new link. */
+function solveHeldLink(stage: Stage, link: KeypointLink, others: KeypointLink[]): void {
+  const turning = new Set(turningSide(others, link.nodeB, link.nodeA))
+  const holds = others.filter((l) => turning.has(l.nodeA) !== turning.has(l.nodeB))
+  const pivot = holds.length ? v3(endOn(holds[0], turning)) : null
+  if (pivot) {
+    const from = v3(link.pointB).sub(pivot)
+    const to = v3(link.pointA).sub(pivot)
+    const second = holds.slice(1).find((l) => v3(endOn(l, turning)).distanceTo(pivot) > TOUCH)
+    let q: THREE.Quaternion | null = null
+    if (second) {
+      // a hinge: only a turn about the line through the two held points
+      const axis = v3(endOn(second, turning)).sub(pivot).normalize()
+      const f = from.clone().projectOnPlane(axis)
+      const t = to.clone().projectOnPlane(axis)
+      if (f.length() > TOUCH && t.length() > TOUCH) {
+        const angle = Math.atan2(f.clone().cross(t).dot(axis), f.dot(t))
+        q = new THREE.Quaternion().setFromAxisAngle(axis, angle)
+      }
+    } else if (from.length() > TOUCH && to.length() > TOUCH) {
+      q = new THREE.Quaternion().setFromUnitVectors(from.normalize(), to.normalize())
+    }
+    if (q) moveBodies(stage, [...turning], rotationAbout(endOn(holds[0], turning), q))
+  }
+  refreshLinks(stage)
+}
+
+// ---------- turning about a keypoint ----------
+
+/** Where body `id` pivots when turned: the point of its latest link, with
+ *  the bodies on its side of that link (itself included), which turn
+ *  while the other side stays. Null when it is not linked. */
+export function hingeOf(
+  stage: Stage,
+  id: string,
+): { pivot: Vec3; fixed: string; turning: string[] } | null {
+  const link = [...stage.links].reverse().find((l) => l.nodeA === id || l.nodeB === id)
+  if (!link) return null
+  const fixed = link.nodeA === id ? link.nodeB : link.nodeA
+  const pivot = link.nodeA === id ? link.pointA : link.pointB
+  return { pivot: { ...pivot }, fixed, turning: turningSide(stage.links, id, fixed) }
+}
+
+/** Turns body `id` to the orientation `rot` (Euler degrees) about `pivot`,
+ *  carrying `turning` with it; links across stay or open as gaps. */
+export function turnBodyAbout(
+  stage: Stage,
+  id: string,
+  rot: Vec3,
+  pivot: Vec3,
+  turning: string[],
+): void {
+  const from = bodyPose(stage, id)
+  if (!from) return
+  const qOf = (r: Vec3) =>
+    new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        THREE.MathUtils.degToRad(r.x),
+        THREE.MathUtils.degToRad(r.y),
+        THREE.MathUtils.degToRad(r.z),
+        'XYZ',
+      ),
+    )
+  const q = qOf(rot).multiply(qOf(from.rot).invert())
+  moveBodies(stage, [...new Set([id, ...turning])], rotationAbout(pivot, q))
+  // exactly the angles asked for, not the round trip through a matrix
+  const pose = bodyPose(stage, id)
+  if (pose) setBodyPose(stage, id, { pos: pose.pos, rot: { ...rot } })
+  refreshLinks(stage)
+}
+
+/** Turns body `id` (a gizmo turn) about its latest link's point; without
+ *  links it simply takes the pose. */
+export function turnBodyTo(stage: Stage, id: string, pose: Pose): void {
+  const hinge = hingeOf(stage, id)
+  if (!hinge) {
+    moveBodyTo(stage, id, pose)
+    return
+  }
+  turnBodyAbout(stage, id, pose.rot, hinge.pivot, hinge.turning)
 }
 
 // ---------- unlocking pieces of an assembly input ----------

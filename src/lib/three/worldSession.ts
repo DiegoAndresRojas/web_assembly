@@ -51,11 +51,16 @@ export interface WorldSessionOptions {
   onReady?: () => void
   onPick?: (hit: PickHit | null) => void
   onFrame?: (dt: number) => void
-  /** Fired when a gizmo drag ends, with the object's new pose. */
-  onObjectMoved?: (id: string, pose: Pose) => void
+  /** Fired when a gizmo drag ends, with the object's new pose — `turn`
+   *  when it was turned about its hinge (see hingeOf). */
+  onObjectMoved?: (id: string, pose: Pose, how: 'move' | 'turn') => void
   /** Ids of the stage objects that move rigidly with `id` while it is
    *  dragged (e.g. linked by keypoints). */
   companionsOf?: (id: string) => string[]
+  /** Where `id` turns when rotated with the gizmo (a keypoint it is linked
+   *  by), and the other stage objects that turn with it. Null: it turns
+   *  about its own origin, with its companions. */
+  hingeOf?: (id: string) => { pivot: Vec3; turning: string[] } | null
 }
 
 export class WorldSession {
@@ -101,6 +106,13 @@ export class WorldSession {
   private clearAlpha = 1
   private grid: THREE.GridHelper | null = null
   private gizmoHelper: THREE.Object3D | null = null
+  private gizmoMode: GizmoMode = 'translate'
+  /** What the gizmo holds while turning a linked object about its hinge:
+   *  an empty at the keypoint, which the object follows. */
+  private pivot = new THREE.Object3D()
+  /** The ids that turn with the selected object about `pivot` (null: the
+   *  gizmo holds the object itself). */
+  private hinge: string[] | null = null
   /** What lights a stage with no lights of its own. */
   private defaultLights: THREE.Light[] = []
   /** The stage's own lights, by light id. */
@@ -175,8 +187,11 @@ export class WorldSession {
       const obj = this.selectedId ? this.getObject(this.selectedId) : null
       if (e.value) this.beginCompanionDrag(obj)
       else this.companionDrag = null
-      if (!e.value && obj && this.selectedId) opts.onObjectMoved?.(this.selectedId, readPose(obj))
+      if (!e.value && obj && this.selectedId) {
+        opts.onObjectMoved?.(this.selectedId, readPose(obj), this.hinge ? 'turn' : 'move')
+      }
     })
+    scene.add(this.pivot)
     // whatever is tied to the dragged object follows it as it moves
     gizmo.addEventListener('objectChange', () => this.moveCompanions())
     this.gizmoHelper = gizmo.getHelper()
@@ -560,17 +575,21 @@ export class WorldSession {
    *  WorldSessionOptions.companionsOf) are, to carry them along. */
   private beginCompanionDrag(obj: THREE.Object3D | null): void {
     this.companionDrag = null
-    const ids = obj && this.selectedId ? (this.opts.companionsOf?.(this.selectedId) ?? []) : []
-    if (!obj || !ids.length) return
-    obj.updateMatrix()
-    const companions = ids
-      .map((id) => this.objects.get(id))
-      .filter((o): o is THREE.Object3D => !!o && o !== obj)
-      .map((object) => {
-        object.updateMatrix()
-        return { object, start: object.matrix.clone() }
-      })
-    this.companionDrag = { object: obj, startInverse: obj.matrix.clone().invert(), companions }
+    if (!obj || !this.selectedId) return
+    // turning about a hinge: the gizmo holds the pivot, and the object is
+    // one more thing that follows it
+    const held = this.hinge ? this.pivot : obj
+    const ids = this.hinge ?? this.opts.companionsOf?.(this.selectedId) ?? []
+    const followers = (this.hinge ? [obj] : []).concat(
+      ids.map((id) => this.objects.get(id)).filter((o): o is THREE.Object3D => !!o && o !== obj),
+    )
+    if (!followers.length) return
+    held.updateMatrix()
+    const companions = followers.map((object) => {
+      object.updateMatrix()
+      return { object, start: object.matrix.clone() }
+    })
+    this.companionDrag = { object: held, startInverse: held.matrix.clone().invert(), companions }
   }
 
   private moveCompanions(): void {
@@ -591,12 +610,29 @@ export class WorldSession {
     // a part key resolves to the piece inside its assembly group; the
     // gizmo handles the parent transform itself
     const obj = id && !this.locked && !this.viewingThrough() ? this.getObject(id) : null
-    if (obj) this.gizmo.attach(obj)
-    else this.gizmo.detach()
+    this.hinge = null
+    if (!obj) {
+      this.gizmo.detach()
+      return
+    }
+    // a linked object turns about the keypoint that holds it
+    const hinge =
+      this.gizmoMode === 'rotate' && obj.parent === this.scene ? this.opts.hingeOf?.(id!) : null
+    if (hinge) {
+      this.pivot.position.set(hinge.pivot.x, hinge.pivot.y, hinge.pivot.z)
+      obj.getWorldQuaternion(this.pivot.quaternion)
+      this.pivot.updateMatrixWorld()
+      this.hinge = hinge.turning
+      this.gizmo.attach(this.pivot)
+    } else {
+      this.gizmo.attach(obj)
+    }
   }
 
   setMode(mode: GizmoMode): void {
+    this.gizmoMode = mode
     this.gizmo?.setMode(mode)
+    this.setSelected(this.selectedId)
   }
 
   private pickMarkers: THREE.Object3D[] = []

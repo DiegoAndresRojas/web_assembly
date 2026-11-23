@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 
 import type { Object3D } from 'three'
 
-import { isFreePart, linkedBodies } from '@/lib/assembly'
+import { hingeOf, isFreePart, linkedBodies } from '@/lib/assembly'
 import { evalStageIn, stagePieces } from '@/lib/chain'
 import { ANIM_CAMERA_KEY } from '@/lib/constants'
 import {
@@ -33,7 +33,7 @@ import { WorldSession, type PickHit } from '@/lib/three/worldSession'
 import { useStore } from '@/store'
 import { selectCurrentProject } from '@/store/selectors'
 import type { AppState, OrbitView } from '@/store/types'
-import type { MembersRow, Pose, Project, StageMember } from '@/types/project'
+import type { MembersRow, Pose, Project, StageMember, Vec3 } from '@/types/project'
 
 let currentSession: WorldSession | null = null
 
@@ -107,12 +107,12 @@ function onPick(hit: PickHit | null): void {
  *  to the stage member (keypoint links solve against it). In animate mode
  *  a move is a preview until recorded into an action (recordPose) — except
  *  for a light that is not on the timeline: it simply is where it is put. */
-function onObjectMoved(nodeId: string, pose: Pose): void {
+function onObjectMoved(nodeId: string, pose: Pose, how: 'move' | 'turn'): void {
   const state = useStore.getState()
   // (nothing moved in the viewer is kept)
   if (state.view === 'viewer') return
   if (state.wmode === 'assembly') {
-    state.setMemberPose(nodeId, pose)
+    state.setMemberPose(nodeId, pose, how)
     return
   }
   const lightId = lightIdOf(nodeId)
@@ -280,6 +280,16 @@ function companionsOf(id: string): string[] {
   return stage ? linkedBodies(stage.links, id) : []
 }
 
+/** Where a stage object turns in an assembly: the keypoint of its latest
+ *  link, with its side of that link turning along (lib/assembly.ts). */
+function hingeOfObject(id: string): { pivot: Vec3; turning: string[] } | null {
+  const state = useStore.getState()
+  if (state.wmode !== 'assembly' || state.view === 'viewer') return null
+  const stage = selectCurrentProject(state)?.stages[state.aid ?? '']
+  const hinge = stage ? hingeOf(stage, id) : null
+  return hinge ? { pivot: hinge.pivot, turning: hinge.turning.filter((b) => b !== id) } : null
+}
+
 /** Keys whose object is being built right now, so repeated syncs while a
  *  file is still parsing don't start (and add) duplicate copies of it. */
 const building = new WeakMap<WorldSession, Set<string>>()
@@ -368,6 +378,7 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
       onFrame,
       onObjectMoved,
       companionsOf,
+      hingeOf: hingeOfObject,
     })
     keepParsedMeshes(selectCurrentProject(useStore.getState())?.meshes ?? [])
     // someone a presentation is shown to keeps looking from where they
@@ -445,9 +456,13 @@ export function useWorldSession(container: HTMLDivElement | null, stageId: strin
     if (frame) session?.setFrameAspect(aspectOf(frame))
   }, [session, frame])
 
+  // (links decide where a selected piece turns: re-placed when they change)
+  const links = useStore((s) =>
+    stageId ? selectCurrentProject(s)?.stages[stageId]?.links : undefined,
+  )
   useEffect(() => {
     session?.setSelected(worldSelId)
-  }, [session, worldSelId])
+  }, [session, worldSelId, links])
 
   useEffect(() => {
     session?.setMode(gizmoMode)

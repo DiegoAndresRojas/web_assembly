@@ -6,6 +6,9 @@ import {
   releasePart,
   restorePart,
   solveLink,
+  turnBodyAbout,
+  turnBodyTo,
+  turningSide,
 } from '@/lib/assembly'
 import { assemblyParts, PART_SEP } from '@/lib/graph'
 import { normalizeLink } from '@/lib/migrations'
@@ -83,12 +86,14 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
       })
     },
 
-    setMemberPose(nodeId, pose) {
+    setMemberPose(nodeId, pose, how = 'move') {
       pushHistory()
       set((state) => {
         const project = findProject(state, state.pid)
         const stage = project && state.aid ? project.stages[state.aid] : undefined
-        if (stage) moveBodyTo(stage, nodeId, pose)
+        if (!stage) return
+        if (how === 'turn') turnBodyTo(stage, nodeId, pose)
+        else moveBodyTo(stage, nodeId, pose)
       })
     },
 
@@ -175,7 +180,15 @@ export function createAssemblySlice(set: Set, get: Get): AssemblyActions {
         const stage = project && state.aid ? project.stages[state.aid] : undefined
         const link = stage?.links.find((l) => l.id === linkId)
         const pose = stage && link ? bodyPose(stage, link.nodeB) : null
-        if (pose) pose.rot[axis] = num(value, 0)
+        if (!stage || !link || !pose) return
+        // B turns about the point it is linked by, A stays
+        turnBodyAbout(
+          stage,
+          link.nodeB,
+          { ...pose.rot, [axis]: num(value, 0) },
+          { ...link.pointB },
+          turningSide(stage.links, link.nodeB, link.nodeA),
+        )
       })
     },
   }

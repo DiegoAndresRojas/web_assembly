@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
   bodyPose,
+  hingeOf,
   linkedBodies,
   lockPart,
   moveBodyTo,
   releasePart,
   restorePart,
   solveLink,
+  turnBodyAbout,
+  turnBodyTo,
+  turningSide,
 } from './assembly'
 import { assemblyParts } from './graph'
 import { normalizeLink, normalizeProject, normalizeStage } from './migrations'
@@ -126,6 +130,87 @@ describe('solveLink', () => {
     solveLink(s, l)
     expect(l.state).toBe('gap')
     expect(l.gap).toBeCloseTo(3)
+  })
+})
+
+/** a at the origin, b two along X, held together at (1, 0, 0). */
+function joined(): Stage {
+  const first = link('a', 'b', {
+    pointA: v(1, 0, 0),
+    normalA: v(1, 0, 0),
+    pointB: v(4, 0, 0),
+    normalB: v(-1, 0, 0),
+  })
+  const s = stage({ a: pose(0), b: pose(5) }, [first])
+  solveLink(s, s.links[0])
+  return s
+}
+
+const touching = (l: KeypointLink) => {
+  expect(l.state).toBe('solved')
+  expect(l.pointA.x).toBeCloseTo(l.pointB.x)
+  expect(l.pointA.y).toBeCloseTo(l.pointB.y)
+  expect(l.pointA.z).toBeCloseTo(l.pointB.z)
+}
+
+describe('a second link between bodies already joined', () => {
+  it('turns B about the first link instead of tearing it apart', () => {
+    const s = joined()
+    closeTo(bodyPose(s, 'b'), pose(2))
+    // one up from the joint on A, one along X from it on B
+    s.links.push(link('a', 'b', { pointA: v(1, 1, 0), pointB: v(2, 0, 0) }))
+    solveLink(s, s.links[1])
+    touching(s.links[0])
+    touching(s.links[1])
+    // a quarter turn about Z, about the joint
+    closeTo(bodyPose(s, 'a'), pose(0))
+    closeTo(bodyPose(s, 'b'), { pos: v(1, 1, 0), rot: v(0, 0, 90) })
+  })
+
+  it('leaves what the turn cannot close as a gap on the new link only', () => {
+    const s = joined()
+    s.links.push(link('a', 'b', { pointA: v(1, 3, 0), pointB: v(2, 0, 0) }))
+    solveLink(s, s.links[1])
+    touching(s.links[0])
+    expect(s.links[1].state).toBe('gap')
+    expect(s.links[1].gap).toBeCloseTo(2)
+  })
+
+  it('turns about the line through two links for a third', () => {
+    const s = joined()
+    s.links.push(link('a', 'b', { pointA: v(1, 0, 1), pointB: v(1, 0, 1) }))
+    solveLink(s, s.links[1])
+    // the hinge runs along Z through (1, 0, 0): the third point swings round it
+    s.links.push(link('a', 'b', { pointA: v(1, 1, 0), pointB: v(2, 0, 0) }))
+    solveLink(s, s.links[2])
+    s.links.forEach(touching)
+  })
+})
+
+describe('turning a linked body', () => {
+  it('pivots on its keypoint while the other side stays', () => {
+    const s = joined()
+    expect(hingeOf(s, 'b')).toMatchObject({ pivot: v(1, 0, 0), fixed: 'a', turning: ['b'] })
+    turnBodyTo(s, 'b', { pos: v(9, 9, 9), rot: v(0, 0, 90) })
+    closeTo(bodyPose(s, 'a'), pose(0))
+    closeTo(bodyPose(s, 'b'), { pos: v(1, 1, 0), rot: v(0, 0, 90) })
+    touching(s.links[0])
+  })
+
+  it('takes what hangs on it along', () => {
+    const s = joined()
+    s.members.push({ ...s.members[1], nodeId: 'c', pose: pose(3) })
+    s.links.push(link('b', 'c', { pointA: v(3, 0, 0), pointB: v(3, 0, 0) }))
+    turnBodyAbout(s, 'b', v(0, 0, 90), v(1, 0, 0), turningSide(s.links, 'b', 'a'))
+    closeTo(bodyPose(s, 'c'), { pos: v(1, 2, 0), rot: v(0, 0, 90) })
+    s.links.forEach(touching)
+  })
+
+  it('moves as a whole when it is not linked', () => {
+    const s = stage({ a: pose(0) })
+    expect(hingeOf(s, 'a')).toBeNull()
+    turnBodyTo(s, 'a', pose(1, 0, 0, 45))
+    closeTo(bodyPose(s, 'a'), pose(1, 0, 0, 45))
   })
 })
 

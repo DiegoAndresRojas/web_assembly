@@ -312,8 +312,9 @@ export interface AssemblyActions {
   pickPoint: (hit: PickHit) => void
   /** Persists a pose edited directly in the viewport (gizmo), as an
    *  undoable step — of a stage input or a released piece; whatever is
-   *  linked to it moves along. */
-  setMemberPose: (nodeId: string, pose: Pose) => void
+   *  linked to it moves along. `turn`: a gizmo turn, which pivots the body
+   *  about its latest keypoint link while the other side stays. */
+  setMemberPose: (nodeId: string, pose: Pose, how?: 'move' | 'turn') => void
   /** Shows / hides the pieces of an assembly input in the panel (its lock). */
   toggleAsmOpen: (asmId: string) => void
   /** Releases a piece (by part key) from its assembly input, or locks a
