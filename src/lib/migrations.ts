@@ -6,12 +6,14 @@ import { reconcileProject } from './stageInputs'
 import { clamp, num, uid } from './utils'
 import { DEFAULT_FRAME_FORMAT, isFrameFormat } from './videoFormat'
 import type {
+  AxisDir,
   Board,
   BoardEdge,
   BoardFrame,
   BoardNode,
   Ease,
   EnvironmentPreset,
+  HierarchyExport,
   KeypointLink,
   LightKind,
   MeshRecord,
@@ -59,9 +61,11 @@ import type {
 //     they play (board.frames); the list of steps is gone.
 // 20: a frame may hold the order its animations play in (order).
 // 21: stages have a text for whoever watches them (note).
+// 22: projects keep how they are exported as an assembly hierarchy for the
+//     training pipeline (hierarchy: unit, axes, names).
 // zustand's persist only calls `migrate` when the stored version differs,
 // so any change normalizeProject() must apply to old saves needs a bump.
-export const CURRENT_VERSION = 21
+export const CURRENT_VERSION = 22
 
 const NODE_KINDS: NodeKind[] = ['mesh', 'assembly', 'animation']
 export const EASES: Ease[] = ['linear', 'easeIn', 'easeOut', 'easeInOut']
@@ -388,11 +392,42 @@ export function normalizeProject(raw: unknown): Project | null {
     meshes,
     board,
     stages,
+    hierarchy: normalizeHierarchy(p.hierarchy),
   }
   // what a stage holds about its inputs follows the board's edges: a row
   // for each input, nothing about a piece that is not wired in any more
   reconcileProject(project)
   return project
+}
+
+const AXIS_DIRS: AxisDir[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z']
+
+function stringMap(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim()
+  }
+  return out
+}
+
+export function normalizeHierarchy(raw: unknown): HierarchyExport | null {
+  if (!raw || typeof raw !== 'object') return null
+  const h = raw as Record<string, unknown>
+  const axis = (v: unknown, fallback: AxisDir) =>
+    AXIS_DIRS.includes(v as AxisDir) ? (v as AxisDir) : fallback
+  const unit = num(h.unit, 1)
+  let forward = axis(h.forward, '-X')
+  let up = axis(h.up, '+Y')
+  // (the two must not lie on the same axis)
+  if (forward[1] === up[1]) [forward, up] = ['-X', '+Y']
+  return {
+    unit: unit > 0 ? unit : 1,
+    forward,
+    up,
+    assemblies: stringMap(h.assemblies),
+    children: stringMap(h.children),
+  }
 }
 
 export function normalizeFrame(raw: unknown): BoardFrame | null {

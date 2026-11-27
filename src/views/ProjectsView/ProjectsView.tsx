@@ -4,6 +4,7 @@ import { Button } from '@/components/Button'
 import { PROJECT_FILE_EXT } from '@/lib/projectFile'
 import { useStore } from '@/store'
 import { DeleteProjectDialog } from './DeleteProjectDialog'
+import { HierarchyDialog } from './HierarchyDialog'
 import { ProjectCard } from './ProjectCard'
 
 /** `?viewer` in the address: the app only to follow assemblies — opened
@@ -30,6 +31,8 @@ export function ProjectsView() {
   const fileInput = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [dropping, setDropping] = useState(false)
+  const [exporting, setExporting] = useState<string | null>(null)
+  const exported = projects.find((p) => p.id === exporting)
 
   const handleNew = () => {
     const project = createProject()
@@ -138,6 +141,7 @@ export function ProjectsView() {
                 onOpen={() => openProject(p.id)}
                 onRename={(name) => renameProject(p.id, name)}
                 onExport={() => void exportProject(p.id)}
+                onExportHierarchy={() => setExporting(p.id)}
                 onDuplicate={() => duplicateProject(p.id)}
                 onDelete={() => askDeleteProject(p.id, p.name)}
               />
@@ -191,6 +195,7 @@ export function ProjectsView() {
 
       {dropping && <div className="drop-veil">Drop a project file to import it</div>}
       <DeleteProjectDialog />
+      {exported && <HierarchyDialog project={exported} onClose={() => setExporting(null)} />}
     </div>
   )
 }

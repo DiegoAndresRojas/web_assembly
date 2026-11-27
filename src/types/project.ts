@@ -244,6 +244,29 @@ export interface Board {
   frames: BoardFrame[]
 }
 
+/** A world direction, for telling repeated pieces apart by where they
+ *  stand (front / back, left / right). */
+export type AxisDir = '+X' | '-X' | '+Y' | '-Y' | '+Z' | '-Z'
+
+/** How the project is handed to the training pipeline as an assembly
+ *  hierarchy (lib/hierarchy.ts): what the author chose in its export
+ *  dialog, kept so the next export comes out the same. */
+export interface HierarchyExport {
+  /** Meters per world unit (0.01: the world is in centimeters). */
+  unit: number
+  /** Which way the product faces, and which way is up, in the world. */
+  forward: AxisDir
+  up: AxisDir
+  /** Name of each assembly that stands as a whole (the product, and each
+   *  sub-assembly joined into it), by the board node that ends its chain.
+   *  Not set: from the node's own name. */
+  assemblies: Record<string, string>
+  /** Name of each piece inside its assembly (`roda_FL`), by
+   *  `<chain-end node id>/<piece node id>`. Not set: its file's name, and
+   *  its place when the same file is used more than once. */
+  children: Record<string, string>
+}
+
 export interface Project {
   id: string
   name: string
@@ -254,6 +277,8 @@ export interface Project {
   meshes: MeshRecord[]
   board: Board
   stages: Record<string, Stage>
+  /** Null until the project is first exported as a hierarchy. */
+  hierarchy: HierarchyExport | null
 }
 
 /** A stage input: a mesh node (`mesh` set) or an upstream assembly node

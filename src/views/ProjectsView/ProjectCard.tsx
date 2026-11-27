@@ -1,6 +1,6 @@
 import { Button } from '@/components/Button'
 import { IconButton } from '@/components/IconButton'
-import { DownloadIcon, DuplicateIcon, PlayIcon, TrashIcon } from '@/components/icons'
+import { DownloadIcon, DuplicateIcon, HierarchyIcon, PlayIcon, TrashIcon } from '@/components/icons'
 import { MeshThumb } from '@/components/MeshThumb'
 import { NameField } from '@/components/NameField'
 import { timeAgo } from '@/lib/timeAgo'
@@ -14,6 +14,8 @@ export interface ProjectCardProps {
   onOpen: () => void
   onRename: (name: string) => void
   onExport: () => void
+  /** Export as an assembly hierarchy, for the training pipeline. */
+  onExportHierarchy: () => void
   onDuplicate: () => void
   onDelete: () => void
 }
@@ -30,6 +32,7 @@ export function ProjectCard({
   onOpen,
   onRename,
   onExport,
+  onExportHierarchy,
   onDuplicate,
   onDelete,
 }: ProjectCardProps) {
@@ -113,6 +116,14 @@ export function ProjectCard({
               onClick={onExport}
             >
               <DownloadIcon size={15} />
+            </IconButton>
+            <IconButton
+              size="md"
+              title="Export for training — the assembly hierarchy (assembly.json) and its meshes"
+              aria-label="Export project for training"
+              onClick={onExportHierarchy}
+            >
+              <HierarchyIcon size={15} />
             </IconButton>
             <IconButton
               size="md"

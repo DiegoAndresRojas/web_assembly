@@ -346,6 +346,14 @@ a:hover {
   box-shadow: var(--shadow-md);
 }
 
+.dialog--wide {
+  width: min(92vw, 640px);
+}
+.dialog--wide .dialog-body {
+  max-height: min(64vh, 620px);
+  overflow: auto;
+}
+
 .dialog-title {
   font-size: 15px;
   font-weight: 600;

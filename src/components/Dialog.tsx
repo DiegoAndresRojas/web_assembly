@@ -7,9 +7,11 @@ export interface DialogProps {
   actions: ReactNode
   /** Leaving without doing anything (Escape). */
   onClose?: () => void
+  /** Room for a form, scrolling when it is long. */
+  wide?: boolean
 }
 
-export function Dialog({ open, title, children, actions, onClose }: DialogProps) {
+export function Dialog({ open, title, children, actions, onClose, wide }: DialogProps) {
   const box = useRef<HTMLDivElement>(null)
 
   // Escape closes — before anything behind the dialog hears the key
@@ -32,7 +34,13 @@ export function Dialog({ open, title, children, actions, onClose }: DialogProps)
   if (!open) return null
   return (
     <div className="dialog-backdrop">
-      <div className="dialog" role="dialog" aria-modal="true" tabIndex={-1} ref={box}>
+      <div
+        className={wide ? 'dialog dialog--wide' : 'dialog'}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        ref={box}
+      >
         <div className="dialog-title">{title}</div>
         <div className="dialog-body">{children}</div>
         <div className="dialog-actions">{actions}</div>
