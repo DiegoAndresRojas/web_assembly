@@ -194,6 +194,41 @@ Comprobación manual:
 - Escribir un texto desde el tablero y desde dentro de la animación; verlo en el visor.
 - Seleccionar varios nodos con el rectángulo y con Shift, moverlos, borrarlos y deshacer.
 
+### Exportar para entrenamiento (rama `feat/hierarchy-export`) — pendiente de comprobar a mano
+
+**Por qué:** el pipeline de entrenamiento del laboratorio (Lab 15, generador de datos sintéticos) lee el producto como una jerarquía de ensamblaje (`assembly.json`, formato 1). Hasta ahora un script intermedio traducía el `.meshstudio` con un archivo de mapeo escrito a mano (unidad, ejes, nombres). Ahora Mesh Studio exporta directamente lo que el pipeline lee.
+
+- **Qué exporta:** un ZIP `<proyecto>.hierarchy.zip` con `assembly.json` y `meshes/<pieza>.<ext>` (los archivos tal como se subieron). Se exporta desde el botón con forma de árbol de cada tarjeta de proyecto.
+- **Cómo se lee el tablero** (`lib/hierarchy.ts`, lógica pura con tests):
+  - Cada cadena de ensamblajes (Assembly 1 → Assembly 2 → …), leída desde su último nodo, es un ensamblaje, y cada nodo de la cadena es una etapa.
+  - Un nodo que recibe dos o más ensamblajes los une: cada uno es un sub-ensamblaje, hijo del conjunto.
+  - Por cada hijo se escribe T (hijo → padre, en metros), con las poses de las etapas siguientes ya compuestas, y se escribe la secuencia.
+  - De cada pieza se escriben su archivo, `scale_to_meters` (escala del nodo × unidad del mundo) y su color.
+- **Lo que el tablero no dice** lo pide el diálogo, y queda guardado en `project.hierarchy` (esquema 22):
+  - la unidad del mundo, que se propone a partir de la escala común de las piezas;
+  - hacia dónde mira el producto y qué es arriba;
+  - el nombre de cada ensamblaje;
+  - el nombre de cada pieza dentro de su ensamblaje.
+- **Nombres:**
+  - Las piezas repetidas se distinguen por su posición: `roda_FL/FR/RL/RR` y `porta_cabine_L/R`.
+  - Las etapas toman el nombre de su nodo; si se renombran en el diálogo, se renombra también el nodo del tablero. Si un nombre se repite, se le añade un número.
+- **Lo que no se puede exportar** se avisa en el diálogo y bloquea el botón:
+  - piezas desbloqueadas o entradas ocultas;
+  - una etapa que no añade piezas;
+  - nombres repetidos o con caracteres no válidos.
+- **Verificado con el proyecto real del camión** (`Project-2.meshstudio`):
+  - La salida coincide con la que producía la traducción del Lab 15: mismas piezas, escalas, colores y secuencias, y T idénticas (diferencia máxima de 2·10⁻¹⁶).
+  - Los nombres de pieza propuestos coinciden con el mapeo hecho a mano.
+  - El Lab 15 carga y valida el ZIP sin pasos intermedios.
+
+Comprobación manual:
+
+- Abrir el diálogo en un proyecto con cadenas y sub-ensamblajes y revisar los nombres propuestos.
+- Cambiar la unidad o los ejes y ver cómo cambian los sufijos de las piezas repetidas.
+- Renombrar una etapa desde el diálogo y verla renombrada en el tablero.
+- Provocar un problema (por ejemplo, dos piezas con el mismo nombre) y ver que el botón Exportar queda bloqueado.
+- Exportar, cerrar y volver a abrir el diálogo: los nombres y ajustes se conservan, también tras exportar e importar el `.meshstudio`.
+
 ### Pendiente de estas ramas
 
 - Fusionar `feat/projects-and-board-ux`, `feat/presentation-frame` y `feat/stage-text-and-board-selection` en `main` cuando estén comprobadas (cada una contiene a la anterior).

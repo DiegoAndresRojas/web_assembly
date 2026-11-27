@@ -11,6 +11,7 @@ import type { VideoBackground } from '@/lib/videoFormat'
 import type {
   Axis,
   FrameFormat,
+  HierarchyExport,
   KeypointLink,
   LightKind,
   PartOverride,
@@ -75,6 +76,13 @@ export interface ProjectsActions {
   exportProject: (pid: string) => Promise<void>
   /** Adds the project held in a project file. */
   importProject: (file: Blob) => Promise<void>
+  /** Renames a stage node of any project (not only the open one). */
+  renameProjectNode: (pid: string, nodeId: string, label: string) => void
+  /** Keeps how the project is exported as an assembly hierarchy. */
+  setHierarchySettings: (pid: string, settings: HierarchyExport) => void
+  /** Downloads the project as an assembly hierarchy for the training
+   *  pipeline (assembly.json and its meshes); resolves with whether it was. */
+  exportHierarchy: (pid: string) => Promise<boolean>
   askDeleteMesh: (id: string, name: string) => void
   openColorEditor: (nodeId: string) => void
   cancelColorEditor: () => void

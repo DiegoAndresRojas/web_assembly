@@ -3,6 +3,7 @@ import { extOf, filesAreKept, MESH_EXTS, putFile } from '@/lib/meshFiles'
 import { isTiny, recommendedFactor } from '@/lib/meshScale'
 import { reconcileProject } from '@/lib/stageInputs'
 import { packProject, projectFileName, unpackProject } from '@/lib/projectFile'
+import { hierarchyFileName, packHierarchy } from '@/lib/three/hierarchyFile'
 import { normalizeMesh, normalizeProject } from '@/lib/migrations'
 import { recordBoardEdit } from './boardHistorySlice'
 import { findProject } from './helpers'
@@ -171,6 +172,41 @@ export function createProjectsSlice(set: Set, get: Get): ProjectsActions {
       } catch (e) {
         console.error('[mesh-studio] could not export the project:', e)
         get().notify(`${project.name} could not be exported: ${reason(e)}.`)
+      } finally {
+        set((state) => {
+          state.working = null
+        })
+      }
+    },
+
+    renameProjectNode(pid, nodeId, label) {
+      set((state) => {
+        const node = findProject(state, pid)?.board.nodes.find((n) => n.id === nodeId)
+        if (node && node.kind !== 'mesh' && label.trim()) node.label = label.trim()
+      })
+    },
+
+    setHierarchySettings(pid, settings) {
+      set((state) => {
+        const p = findProject(state, pid)
+        if (p) p.hierarchy = settings
+      })
+    },
+
+    async exportHierarchy(pid) {
+      const project = get().projects.find((p) => p.id === pid)
+      if (!project?.hierarchy || get().working) return false
+      set((state) => {
+        state.working = `Exporting ${project.name} for training…`
+      })
+      try {
+        const { blob } = await packHierarchy(project, project.hierarchy)
+        triggerDownload(blob, hierarchyFileName(project))
+        return true
+      } catch (e) {
+        console.error('[mesh-studio] could not export the hierarchy:', e)
+        get().notify(`${project.name} could not be exported for training: ${reason(e)}`)
+        return false
       } finally {
         set((state) => {
           state.working = null

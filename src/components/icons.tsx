@@ -101,6 +101,16 @@ export function DownloadIcon(props: IconProps) {
   )
 }
 
+/** A tree: the project as an assembly hierarchy, for training. */
+export function HierarchyIcon(props: IconProps) {
+  return (
+    <Icon
+      {...props}
+      path="M160,112h48a16,16,0,0,0,16-16V48a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16V64H128a24,24,0,0,0-24,24v32H72V112A16,16,0,0,0,56,96H24A16,16,0,0,0,8,112v32a16,16,0,0,0,16,16H56a16,16,0,0,0,16-16v-8h32v32a24,24,0,0,0,24,24h16v16a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V160a16,16,0,0,0-16-16H160a16,16,0,0,0-16,16v16H128a8,8,0,0,1-8-8V88a8,8,0,0,1,8-8h16V96A16,16,0,0,0,160,112ZM56,144H24V112H56v32Zm104,16h48v48H160Zm0-112h48V96H160Z"
+    />
+  )
+}
+
 /** An arrow coming into a tray: bring something in from elsewhere. */
 export function ImportIcon(props: IconProps) {
   return (
@@ -169,11 +179,23 @@ export function FrameIcon(props: IconProps) {
 
 /** Next in a sequence (the mirror of SkipBackIcon). */
 export function SkipNextIcon(props: IconProps) {
-  return <Icon {...props} viewBox="0 0 24 24" path="M16 4h3v16h-3zM5 5.1v13.8a1 1 0 0 0 1.55.83l8.55-6.9a1 1 0 0 0 0-1.66l-8.55-6.9A1 1 0 0 0 5 5.1Z" />
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M16 4h3v16h-3zM5 5.1v13.8a1 1 0 0 0 1.55.83l8.55-6.9a1 1 0 0 0 0-1.66l-8.55-6.9A1 1 0 0 0 5 5.1Z"
+    />
+  )
 }
 
 export function PlayIcon(props: IconProps) {
-  return <Icon {...props} viewBox="0 0 24 24" path="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z"
+    />
+  )
 }
 
 export function PauseIcon(props: IconProps) {
@@ -181,7 +203,13 @@ export function PauseIcon(props: IconProps) {
 }
 
 export function SkipBackIcon(props: IconProps) {
-  return <Icon {...props} viewBox="0 0 24 24" path="M5 4h3v16H5zM19 5.1v13.8a1 1 0 0 1-1.55.83L8.9 12.83a1 1 0 0 1 0-1.66l8.55-6.9A1 1 0 0 1 19 5.1Z" />
+  return (
+    <Icon
+      {...props}
+      viewBox="0 0 24 24"
+      path="M5 4h3v16H5zM19 5.1v13.8a1 1 0 0 1-1.55.83L8.9 12.83a1 1 0 0 1 0-1.66l8.55-6.9A1 1 0 0 1 19 5.1Z"
+    />
+  )
 }
 
 export function RepeatIcon(props: IconProps) {
@@ -196,11 +224,7 @@ export function RepeatIcon(props: IconProps) {
 
 export function MagnetIcon(props: IconProps) {
   return (
-    <Icon
-      {...props}
-      viewBox="0 0 24 24"
-      path="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0V3Z"
-    />
+    <Icon {...props} viewBox="0 0 24 24" path="M5 3h4v8a3 3 0 0 0 6 0V3h4v8a7 7 0 0 1-14 0V3Z" />
   )
 }
 
